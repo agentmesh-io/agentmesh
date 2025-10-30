@@ -4,10 +4,14 @@ import com.therighthandapp.agentmesh.blackboard.BlackboardService;
 import com.therighthandapp.agentmesh.llm.ChatMessage;
 import com.therighthandapp.agentmesh.llm.LLMClient;
 import com.therighthandapp.agentmesh.llm.LLMResponse;
+import com.therighthandapp.agentmesh.selfcorrection.CorrectionResult;
+import com.therighthandapp.agentmesh.selfcorrection.SelfCorrectionLoop;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +26,9 @@ public class AgentActivityImpl implements AgentActivity {
 
     private final BlackboardService blackboard;
     private final LLMClient llmClient;
+
+    @Autowired(required = false)
+    private SelfCorrectionLoop selfCorrectionLoop;
 
     public AgentActivityImpl(BlackboardService blackboard, LLMClient llmClient) {
         this.blackboard = blackboard;
@@ -54,6 +61,35 @@ public class AgentActivityImpl implements AgentActivity {
     public String executeCodeGeneration(String planId, String taskDescription) {
         log.info("Executing code generation for task: {}", taskDescription);
 
+        // Use self-correction loop if available
+        if (selfCorrectionLoop != null) {
+            log.info("Using self-correction loop for code generation");
+
+            // Define quality requirements
+            List<String> requirements = Arrays.asList("class", "public", "method");
+
+            CorrectionResult result = selfCorrectionLoop.correctUntilValid(
+                    "coder-agent",
+                    taskDescription,
+                    requirements
+            );
+
+            if (result.isSuccess()) {
+                log.info("Self-correction succeeded after {} iterations", result.getIterationCount());
+                // Result already posted to Blackboard by SelfCorrectionLoop
+                var entries = blackboard.readByType("CODE_FINAL");
+                if (!entries.isEmpty()) {
+                    return entries.get(entries.size() - 1).getId().toString();
+                }
+            } else {
+                log.warn("Self-correction failed: {}", result.getFailureReason());
+                // Fall through to basic generation
+            }
+        }
+
+        // Fallback: Basic generation without self-correction
+        log.info("Using basic code generation (no self-correction)");
+
         // Retrieve plan from Blackboard
         String planContent = blackboard.getById(Long.parseLong(planId))
                 .map(e -> e.getContent())
@@ -66,7 +102,7 @@ public class AgentActivityImpl implements AgentActivity {
         );
 
         Map<String, Object> params = new HashMap<>();
-        params.put("temperature", 0.3); // Lower temperature for more deterministic code
+        params.put("temperature", 0.3);
         params.put("max_tokens", 3000);
 
         LLMResponse response = llmClient.chat(messages, params);

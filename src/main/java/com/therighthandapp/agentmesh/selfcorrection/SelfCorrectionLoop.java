@@ -6,11 +6,14 @@ import com.therighthandapp.agentmesh.llm.LLMClient;
 import com.therighthandapp.agentmesh.llm.LLMResponse;
 import com.therighthandapp.agentmesh.mast.MASTFailureMode;
 import com.therighthandapp.agentmesh.mast.MASTValidator;
+import com.therighthandapp.agentmesh.metrics.AgentMeshMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -35,6 +38,9 @@ public class SelfCorrectionLoop {
     private final BlackboardService blackboard;
     private final MASTValidator mastValidator;
 
+    @Autowired(required = false)
+    private AgentMeshMetrics metrics;
+
     public SelfCorrectionLoop(LLMClient llmClient, BlackboardService blackboard, MASTValidator mastValidator) {
         this.llmClient = llmClient;
         this.blackboard = blackboard;
@@ -53,6 +59,10 @@ public class SelfCorrectionLoop {
                                               List<String> requirements) {
         log.info("Starting self-correction loop for agent {} on task: {}", agentId, taskDescription);
 
+        if (metrics != null) {
+            metrics.recordSelfCorrectionAttempt();
+        }
+
         Instant startTime = Instant.now();
         String currentOutput = null;
         List<String> conversationHistory = new ArrayList<>();
@@ -62,6 +72,10 @@ public class SelfCorrectionLoop {
 
             // Check timeout
             if (mastValidator.detectTimeout(agentId, taskDescription, startTime, timeoutSeconds)) {
+                if (metrics != null) {
+                    Duration duration = Duration.between(startTime, Instant.now());
+                    metrics.recordSelfCorrectionFailure(duration, iteration);
+                }
                 return CorrectionResult.failure("Timeout after " + iteration + " iterations", iteration);
             }
 
@@ -75,6 +89,12 @@ public class SelfCorrectionLoop {
             if (validation.isValid()) {
                 log.info("Self-correction succeeded after {} iterations", iteration);
                 blackboard.post(agentId, "CODE_FINAL", taskDescription, currentOutput);
+
+                if (metrics != null) {
+                    Duration duration = Duration.between(startTime, Instant.now());
+                    metrics.recordSelfCorrectionSuccess(duration, iteration);
+                }
+
                 return CorrectionResult.success(currentOutput, iteration);
             }
 
@@ -89,6 +109,10 @@ public class SelfCorrectionLoop {
             if (mastValidator.detectLoop(agentId, currentOutput,
                     conversationHistory.subList(Math.max(0, conversationHistory.size() - 10),
                                               conversationHistory.size()))) {
+                if (metrics != null) {
+                    Duration duration = Duration.between(startTime, Instant.now());
+                    metrics.recordSelfCorrectionFailure(duration, iteration);
+                }
                 return CorrectionResult.failure("Loop detected - agent is stuck", iteration);
             }
         }
@@ -96,6 +120,11 @@ public class SelfCorrectionLoop {
         log.warn("Self-correction failed after {} iterations", maxIterations);
         mastValidator.recordViolation(agentId, MASTFailureMode.FM_3_1_OUTPUT_QUALITY,
                 taskDescription, "Failed to produce valid output after " + maxIterations + " iterations");
+
+        if (metrics != null) {
+            Duration duration = Duration.between(startTime, Instant.now());
+            metrics.recordSelfCorrectionFailure(duration, maxIterations);
+        }
 
         return CorrectionResult.failure("Max iterations reached", maxIterations);
     }

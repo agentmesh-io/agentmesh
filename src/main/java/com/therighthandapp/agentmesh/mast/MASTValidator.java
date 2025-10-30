@@ -1,7 +1,9 @@
 package com.therighthandapp.agentmesh.mast;
 
+import com.therighthandapp.agentmesh.metrics.AgentMeshMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +23,9 @@ public class MASTValidator {
 
     private final MASTViolationRepository violationRepository;
 
+    @Autowired(required = false)
+    private AgentMeshMetrics metrics;
+
     public MASTValidator(MASTViolationRepository violationRepository) {
         this.violationRepository = violationRepository;
     }
@@ -36,6 +41,11 @@ public class MASTValidator {
 
         log.warn("MAST Violation detected: {} for agent {} on task {}",
                  failureMode.getCode(), agentId, taskId);
+
+        // Record metrics
+        if (metrics != null) {
+            metrics.recordMASTViolation(failureMode);
+        }
 
         return saved;
     }
