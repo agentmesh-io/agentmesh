@@ -1,0 +1,76 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: agentmesh
+
+  main:
+    allow-bean-definition-overriding: true
+
+  # H2 Database configuration (dev/test)
+  datasource:
+    url: jdbc:h2:mem:agentmesh;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  # JPA/Hibernate configuration
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  # H2 Console (dev only)
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+# AgentMesh specific configuration
+agentmesh:
+  # Weaviate vector DB for Long-Term Memory
+  weaviate:
+    enabled: false  # Set to true when Weaviate is available
+    scheme: http
+    host: localhost:8080
+
+  # Temporal orchestration engine
+  temporal:
+    enabled: false  # Set to true when Temporal service is available
+    service-address: 127.0.0.1:7233
+    namespace: default
+    task-queue: agentmesh-tasks
+
+  # LLM Configuration
+  llm:
+    # OpenAI Configuration
+    openai:
+      enabled: false  # Set to true to use OpenAI instead of MockLLM
+      api-key: ${OPENAI_API_KEY:}  # Set via environment variable
+      model: gpt-4
+      embedding-model: text-embedding-ada-002
+
+  # Self-Correction Loop Configuration
+  selfcorrection:
+    max-iterations: 5  # Maximum correction attempts
+    timeout-seconds: 300  # 5 minutes timeout per task
+
+# Actuator configuration for observability
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: ${spring.application.name}
+
