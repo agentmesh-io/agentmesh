@@ -47,5 +47,9 @@ public class CorrectionResult {
     public Instant getTimestamp() {
         return timestamp;
     }
+
+    public String getOutput() {
+        return content;
+    }
 }
 

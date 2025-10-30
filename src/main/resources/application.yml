@@ -60,6 +60,19 @@ agentmesh:
     max-iterations: 5  # Maximum correction attempts
     timeout-seconds: 300  # 5 minutes timeout per task
 
+  # GitHub Integration Configuration
+  github:
+    enabled: false  # Set to true to enable GitHub integration
+    token: ${GITHUB_TOKEN:}  # Set via environment variable
+    repo-owner: ${GITHUB_REPO_OWNER:your-org}
+    repo-name: ${GITHUB_REPO_NAME:your-repo}
+    webhook-secret: ${GITHUB_WEBHOOK_SECRET:}
+
+    # GitHub Projects (optional)
+    projects:
+      enabled: false  # Set to true to enable Projects integration
+      project-id: ${GITHUB_PROJECT_ID:}  # GraphQL node ID (e.g., PVT_kwDOABC123)
+
 # Actuator configuration for observability
 management:
   endpoints:
