@@ -445,22 +445,43 @@ Time per iteration: 3-6s (with real LLM)
 
 ---
 
-### 7. GitHub Integration
+### 7. VCS & Project Management Integration (Multi-Provider)
 
-**Purpose:** Zero-frontend project management via GitHub
+**Purpose:** Zero-frontend project management via multiple providers
+
+**Architecture:** Plugin-based adapter pattern with provider abstraction
+
+**Supported VCS Providers:**
+- ✅ **GitHub** - Full implementation
+- ✅ **GitLab** - Complete adapter
+- 🔲 **Bitbucket** - Ready to implement
+- 🔲 **Azure DevOps** - Ready to implement
+
+**Supported PM Providers:**
+- ✅ **GitHub Projects** - Full implementation
+- ✅ **Jira** - Complete adapter
+- 🔲 **Azure Boards** - Ready to implement
+- 🔲 **Linear** - Ready to implement
 
 **Implementation:**
-- **Models:** `GitHubEvent.java`
-- **Services:** `GitHubIntegrationService.java`, `GitHubProjectsService.java`
+- **Interfaces:** `VcsProvider.java`, `ProjectManagementProvider.java`
+- **Models:** `VcsIssue.java`, `VcsRepository.java`, `ProjectItem.java`
+- **Adapters:** 
+  - `GitHubVcsAdapter.java`, `GitHubProjectsAdapter.java`
+  - `GitLabVcsAdapter.java`, `JiraAdapter.java`
+- **Original Services:** `GitHubIntegrationService.java`, `GitHubProjectsService.java`
 - **Controller:** `GitHubWebhookController.java`
 
 **Key Features:**
+- ✅ **Multi-provider support** - Switch via configuration
+- ✅ **Hybrid mode** - Use GitHub for VCS, Jira for PM
 - ✅ Webhook handling (issues, PRs, comments)
-- ✅ Automatic PR creation
+- ✅ Automatic PR/MR creation
 - ✅ Issue comments for status updates
-- ✅ Label management
-- ✅ GitHub Projects integration
+- ✅ Label/tag management
+- ✅ Project board integration
 - ✅ Async workflow execution
+- ✅ Provider-agnostic core logic
 
 **Configuration:**
 ```yaml
