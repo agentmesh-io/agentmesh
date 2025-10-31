@@ -60,6 +60,52 @@ agentmesh:
     max-iterations: 5  # Maximum correction attempts
     timeout-seconds: 300  # 5 minutes timeout per task
 
+  # Multi-Tenancy Configuration
+  multitenancy:
+    enabled: false  # Set to true to enable multi-tenancy
+    default-tier: STANDARD
+
+    # Resource defaults by tier
+    tiers:
+      free:
+        max-projects: 1
+        max-agents: 5
+        max-storage-mb: 1024
+      standard:
+        max-projects: 10
+        max-agents: 50
+        max-storage-mb: 10240
+      premium:
+        max-projects: 50
+        max-agents: 200
+        max-storage-mb: 51200
+      enterprise:
+        max-projects: 999
+        max-agents: 999
+        max-storage-mb: 1048576
+
+    # Data sovereignty
+    data-regions:
+      - us-east-1
+      - us-west-2
+      - eu-west-1
+      - ap-southeast-1
+
+    # Kubernetes integration
+    kubernetes:
+      enabled: false  # Set true for K8s deployment
+      namespace-prefix: agentmesh
+      apply-network-policies: true
+      apply-resource-quotas: true
+
+  # VCS Provider Configuration
+  vcs:
+    provider: github  # github, gitlab, bitbucket, azure-devops
+
+  # Project Management Provider Configuration
+  projectmanagement:
+    provider: github-projects  # github-projects, jira, azure-boards, linear
+
   # GitHub Integration Configuration
   github:
     enabled: false  # Set to true to enable GitHub integration
@@ -86,4 +132,3 @@ management:
         enabled: true
     tags:
       application: ${spring.application.name}
-

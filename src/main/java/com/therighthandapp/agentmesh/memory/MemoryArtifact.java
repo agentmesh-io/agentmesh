@@ -6,6 +6,7 @@ import java.util.Map;
 
 /**
  * Represents a memory artifact stored in the Long-Term Memory (vector DB)
+ * Enhanced with multi-tenant isolation fields
  */
 public class MemoryArtifact {
     private String id;
@@ -16,6 +17,12 @@ public class MemoryArtifact {
     private Map<String, Object> metadata;
     private Instant timestamp;
     private float[] embedding; // Vector representation for semantic search
+
+    // Multi-tenancy fields
+    private String tenantId;
+    private String projectId;
+    private String vectorNamespace; // For RAG isolation
+    private String dataPartitionKey; // For cross-reference with Blackboard
 
     public MemoryArtifact() {
         this.metadata = new HashMap<>();
@@ -94,5 +101,37 @@ public class MemoryArtifact {
     public void setEmbedding(float[] embedding) {
         this.embedding = embedding;
     }
-}
 
+    // Multi-tenant getters and setters
+    public String getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
+    }
+
+    public String getProjectId() {
+        return projectId;
+    }
+
+    public void setProjectId(String projectId) {
+        this.projectId = projectId;
+    }
+
+    public String getVectorNamespace() {
+        return vectorNamespace;
+    }
+
+    public void setVectorNamespace(String vectorNamespace) {
+        this.vectorNamespace = vectorNamespace;
+    }
+
+    public String getDataPartitionKey() {
+        return dataPartitionKey;
+    }
+
+    public void setDataPartitionKey(String dataPartitionKey) {
+        this.dataPartitionKey = dataPartitionKey;
+    }
+}
