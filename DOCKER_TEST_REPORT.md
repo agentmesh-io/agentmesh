@@ -37,13 +37,24 @@ Port: 8081
 Version: 1.24.4
 ```
 
-### **3. AgentMesh Application**
+### **3. Temporal Orchestration**
+```
+Service: agentmesh-temporal
+Status: ✅ Running (healthy)
+Port: 7233 (gRPC), 8082 (Web UI)
+Version: 1.22.4
+Database: PostgreSQL (shared)
+Web UI: http://localhost:8082
+```
+
+### **4. AgentMesh Application**
 ```
 Service: agentmesh-app
 Status: ✅ Running (healthy)
 Port: 8080
 Health: UP
 Database: Connected to PostgreSQL
+Temporal: Ready for workflows
 ```
 
 ---
@@ -142,7 +153,8 @@ Status: ✅ PASSED
 ### **Services Deployed:**
 1. **postgres** - PostgreSQL 16 Alpine
 2. **weaviate** - Weaviate 1.24.4
-3. **agentmesh** - AgentMesh Application (Java 22)
+3. **temporal** - Temporal 1.22.4 (Workflow Orchestration)
+4. **agentmesh** - AgentMesh Application (Java 22)
 
 ### **Network:**
 ```
@@ -154,6 +166,7 @@ All services connected
 ```
 postgres_data - Database persistence
 weaviate_data - Vector DB persistence
+temporal_data - Temporal workflow persistence
 ```
 
 ---
@@ -163,8 +176,9 @@ weaviate_data - Vector DB persistence
 ### **Startup Times:**
 - PostgreSQL: ~5 seconds
 - Weaviate: ~10 seconds
+- Temporal: ~45 seconds (database schema setup)
 - AgentMesh App: ~30 seconds
-- Total: ~45 seconds
+- Total: ~60 seconds
 
 ### **Resource Usage:**
 ```
@@ -224,6 +238,12 @@ localhost:5432 - PostgreSQL (internal only)
 ### **Weaviate:**
 ```
 http://localhost:8081 - Weaviate API (internal only)
+```
+
+### **Temporal:**
+```
+localhost:7233        - Temporal gRPC (internal only)
+http://localhost:8082 - Temporal Web UI (workflow monitoring)
 ```
 
 ---
