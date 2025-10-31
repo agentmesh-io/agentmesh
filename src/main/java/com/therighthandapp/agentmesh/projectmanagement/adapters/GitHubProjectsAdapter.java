@@ -3,6 +3,7 @@ package com.therighthandapp.agentmesh.projectmanagement.adapters;
 import com.therighthandapp.agentmesh.github.GitHubProjectsService;
 import com.therighthandapp.agentmesh.projectmanagement.ProjectItem;
 import com.therighthandapp.agentmesh.projectmanagement.ProjectManagementProvider;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -14,7 +15,8 @@ import java.util.Map;
  * GitHub Projects adapter implementing ProjectManagementProvider interface
  */
 @Component("githubProjectsProvider")
-@ConditionalOnProperty(name = "agentmesh.projectmanagement.provider", havingValue = "github-projects")
+@ConditionalOnBean(GitHubProjectsService.class)
+@ConditionalOnProperty(name = "agentmesh.github.projects.enabled", havingValue = "true")
 public class GitHubProjectsAdapter implements ProjectManagementProvider {
 
     private final GitHubProjectsService githubProjectsService;

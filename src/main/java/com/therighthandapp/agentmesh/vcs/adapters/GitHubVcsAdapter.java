@@ -4,6 +4,7 @@ import com.therighthandapp.agentmesh.github.GitHubIntegrationService;
 import com.therighthandapp.agentmesh.vcs.VcsIssue;
 import com.therighthandapp.agentmesh.vcs.VcsProvider;
 import com.therighthandapp.agentmesh.vcs.VcsRepository;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -14,7 +15,8 @@ import java.util.Map;
  * GitHub adapter implementing VcsProvider interface
  */
 @Component("githubVcsProvider")
-@ConditionalOnProperty(name = "agentmesh.vcs.provider", havingValue = "github")
+@ConditionalOnBean(GitHubIntegrationService.class)
+@ConditionalOnProperty(name = "agentmesh.github.enabled", havingValue = "true")
 public class GitHubVcsAdapter implements VcsProvider {
 
     private final GitHubIntegrationService githubService;

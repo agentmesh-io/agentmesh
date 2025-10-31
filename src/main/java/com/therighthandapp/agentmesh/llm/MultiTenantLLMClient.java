@@ -222,7 +222,7 @@ public class MultiTenantLLMClient {
         record.setTotalTokens(usage.getTotalTokens());
         record.setEstimatedCost(usage.getEstimatedCost());
         record.setDurationMs(durationMs);
-        record.setModel(response.getModel());
+        record.setModel(response.getModelName());
 
         tokenUsageTracker.track(record);
     }

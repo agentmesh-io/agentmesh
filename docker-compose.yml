@@ -1,0 +1,122 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: agentmesh-postgres
+    environment:
+      POSTGRES_DB: agentmesh
+      POSTGRES_USER: agentmesh
+      POSTGRES_PASSWORD: agentmesh123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentmesh"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Weaviate Vector Database
+  weaviate:
+    image: semitechnologies/weaviate:1.24.4
+    container_name: agentmesh-weaviate
+    environment:
+      QUERY_DEFAULTS_LIMIT: 25
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
+      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
+      DEFAULT_VECTORIZER_MODULE: 'none'
+      CLUSTER_HOSTNAME: 'weaviate'
+    ports:
+      - "8081:8080"
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/v1/.well-known/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Temporal Server (commented out - optional for basic testing)
+  # temporal:
+  #   image: temporalio/auto-setup:1.22.4
+  #   container_name: agentmesh-temporal
+  #   environment:
+  #     - DB=sqlite
+  #     - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
+  #   ports:
+  #     - "7233:7233"
+  #     - "8082:8080"
+  #   healthcheck:
+  #     test: ["CMD", "tctl", "--address", "temporal:7233", "cluster", "health"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+  # AgentMesh Application
+  agentmesh:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agentmesh-app
+    environment:
+      # Database Configuration
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/agentmesh
+      SPRING_DATASOURCE_USERNAME: agentmesh
+      SPRING_DATASOURCE_PASSWORD: agentmesh123
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
+      SPRING_JPA_SHOW_SQL: false
+
+      # Weaviate Configuration
+      AGENTMESH_WEAVIATE_ENABLED: 'false'
+      AGENTMESH_WEAVIATE_SCHEME: http
+      AGENTMESH_WEAVIATE_HOST: weaviate:8080
+
+      # Temporal Configuration
+      AGENTMESH_TEMPORAL_ENABLED: 'false'
+      AGENTMESH_TEMPORAL_SERVICE_ADDRESS: temporal:7233
+
+      # Multi-tenancy
+      AGENTMESH_MULTITENANCY_ENABLED: 'false'
+
+      # Billing
+      AGENTMESH_BILLING_ENABLED: 'false'
+
+      # Operator
+      AGENTMESH_OPERATOR_ENABLED: 'false'
+
+      # LLM Configuration
+      AGENTMESH_LLM_OPENAI_ENABLED: 'false'
+      AGENTMESH_LLM_LORA_ENABLED: 'false'
+
+      # GitHub Integration
+      AGENTMESH_GITHUB_ENABLED: 'false'
+
+      # JVM Options
+      JAVA_OPTS: '-Xmx512m -Xms256m'
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      weaviate:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  postgres_data:
+  weaviate_data:
+
+networks:
+  default:
+    name: agentmesh-network
+

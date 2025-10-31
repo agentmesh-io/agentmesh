@@ -88,7 +88,7 @@ public class TenantOperator {
         // Create informer for Tenant resources
         SharedIndexInformer<TenantResource> tenantInformer =
             informerFactory.sharedIndexInformerFor(
-                (params) -> tenantApi.list().getObject(),
+                tenantApi,
                 TenantResource.class,
                 Duration.ofSeconds(reconcileIntervalSeconds).toMillis()
             );
