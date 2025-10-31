@@ -39,21 +39,29 @@ services:
       timeout: 5s
       retries: 5
 
-  # Temporal Server (commented out - optional for basic testing)
-  # temporal:
-  #   image: temporalio/auto-setup:1.22.4
-  #   container_name: agentmesh-temporal
-  #   environment:
-  #     - DB=sqlite
-  #     - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
-  #   ports:
-  #     - "7233:7233"
-  #     - "8082:8080"
-  #   healthcheck:
-  #     test: ["CMD", "tctl", "--address", "temporal:7233", "cluster", "health"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
+  # Temporal Server
+  temporal:
+    image: temporalio/auto-setup:1.22.4
+    container_name: agentmesh-temporal
+    environment:
+      - DB=postgresql
+      - DB_PORT=5432
+      - POSTGRES_USER=agentmesh
+      - POSTGRES_PWD=agentmesh123
+      - POSTGRES_SEEDS=postgres
+      - ENABLE_ES=false
+    ports:
+      - "7233:7233"
+      - "8082:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "tctl", "--address", "temporal:7233", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
 
   # AgentMesh Application
   agentmesh:
@@ -115,6 +123,7 @@ services:
 volumes:
   postgres_data:
   weaviate_data:
+  temporal_data:
 
 networks:
   default:
