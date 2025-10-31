@@ -1,0 +1,121 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: agentgroups.agentmesh.io
+spec:
+  group: agentmesh.io
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+                - tenantId
+                - projectId
+                - agents
+              properties:
+                tenantId:
+                  type: string
+                  description: "Tenant ID this agent group belongs to"
+                projectId:
+                  type: string
+                  description: "Project ID within the tenant"
+                agents:
+                  type: array
+                  description: "List of agents in this group"
+                  items:
+                    type: object
+                    required:
+                      - name
+                      - type
+                    properties:
+                      name:
+                        type: string
+                        description: "Agent name"
+                      type:
+                        type: string
+                        description: "Agent type (e.g., 'SRS_WRITER', 'CODE_GENERATOR')"
+                      replicas:
+                        type: integer
+                        minimum: 1
+                        maximum: 10
+                        default: 1
+                        description: "Number of agent instances"
+                      resources:
+                        type: object
+                        description: "Resource requirements for this agent"
+                        properties:
+                          cpuRequest:
+                            type: string
+                          cpuLimit:
+                            type: string
+                          memoryRequest:
+                            type: string
+                          memoryLimit:
+                            type: string
+                      loraAdapter:
+                        type: string
+                        description: "LoRA adapter path for this agent"
+                blackboardEnabled:
+                  type: boolean
+                  default: true
+                  description: "Enable blackboard communication"
+                orchestrationEngine:
+                  type: string
+                  enum: ["temporal", "simple"]
+                  default: "temporal"
+                  description: "Orchestration engine to use"
+                selfCorrectionEnabled:
+                  type: boolean
+                  default: true
+                  description: "Enable MAST self-correction"
+                maxIterations:
+                  type: integer
+                  minimum: 1
+                  maximum: 10
+                  default: 5
+                  description: "Max self-correction iterations"
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  enum: ["Pending", "Creating", "Running", "Scaling", "Stopped", "Failed"]
+                  description: "Current phase"
+                activeAgents:
+                  type: integer
+                  description: "Number of running agent instances"
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+      subresources:
+        status: {}
+        scale:
+          specReplicasPath: .spec.agents[0].replicas
+          statusReplicasPath: .status.activeAgents
+  scope: Namespaced
+  names:
+    plural: agentgroups
+    singular: agentgroup
+    kind: AgentGroup
+    shortNames:
+      - ag
+

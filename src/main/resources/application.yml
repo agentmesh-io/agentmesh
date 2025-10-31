@@ -55,6 +55,14 @@ agentmesh:
       model: gpt-4
       embedding-model: text-embedding-ada-002
 
+    # LoRA Adapter Configuration (Phase 3)
+    lora:
+      enabled: false  # Set true to enable LoRA adapters
+      max-cached-adapters: 10
+      adapter-base-path: /var/agentmesh/lora-adapters
+      # Supported serving backends: vllm, punica, slora
+      serving-backend: vllm
+
   # Self-Correction Loop Configuration
   selfcorrection:
     max-iterations: 5  # Maximum correction attempts
@@ -98,6 +106,12 @@ agentmesh:
       apply-network-policies: true
       apply-resource-quotas: true
 
+  # Kubernetes Operator Configuration (Phase 3 Part 2)
+  operator:
+    enabled: false  # Set true to enable K8s operator
+    reconcile-interval-seconds: 30
+    worker-count: 2
+
   # VCS Provider Configuration
   vcs:
     provider: github  # github, gitlab, bitbucket, azure-devops
@@ -118,6 +132,30 @@ agentmesh:
     projects:
       enabled: false  # Set to true to enable Projects integration
       project-id: ${GITHUB_PROJECT_ID:}  # GraphQL node ID (e.g., PVT_kwDOABC123)
+
+  # Billing Configuration (Phase 3)
+  billing:
+    enabled: false  # Set true to enable billing tracking
+
+    # Pricing model
+    model: hybrid  # token, outcome, hybrid, subscription
+
+    # Token pricing (per 1K tokens)
+    token-pricing:
+      input-cost: 0.01   # $0.01 per 1K input tokens
+      output-cost: 0.03  # $0.03 per 1K output tokens
+
+    # Outcome-based pricing
+    outcome-pricing:
+      success-fee: 2.00      # $2.00 per successful task
+      failure-credit: -0.50  # $0.50 credit for failed tasks
+
+    # Tier discounts
+    tier-discounts:
+      free: 1.0       # 100% discount (free)
+      standard: 0.0   # No discount
+      premium: 0.20   # 20% discount
+      enterprise: 0.30  # 30% discount
 
 # Actuator configuration for observability
 management:
