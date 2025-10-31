@@ -199,7 +199,7 @@ public class TenantService {
                     .putLabelsItem("tier", tenant.getTier().name().toLowerCase())
                 );
 
-            api.createNamespace(namespace, null, null, null, null);
+            api.createNamespace(namespace).execute();
             log.info("Created Kubernetes namespace: {}", tenant.getK8sNamespace());
 
         } catch (ApiException e) {
@@ -223,7 +223,7 @@ public class TenantService {
             CoreV1Api api = new CoreV1Api(k8sClient);
 
             // Calculate resource limits based on tenant tier
-            Map<String, String> hard = calculateResourceLimits(tenant);
+            Map<String, io.kubernetes.client.custom.Quantity> hard = calculateResourceLimits(tenant);
 
             V1ResourceQuota quota = new V1ResourceQuota()
                 .metadata(new V1ObjectMeta()
@@ -236,13 +236,12 @@ public class TenantService {
 
             try {
                 // Try to create
-                api.createNamespacedResourceQuota(tenant.getK8sNamespace(), quota, null, null, null, null);
+                api.createNamespacedResourceQuota(tenant.getK8sNamespace(), quota).execute();
                 log.info("Created resource quota for namespace: {}", tenant.getK8sNamespace());
             } catch (ApiException e) {
                 if (e.getCode() == 409) {
                     // Already exists, update it
-                    api.replaceNamespacedResourceQuota("compute-resources", tenant.getK8sNamespace(),
-                        quota, null, null, null, null);
+                    api.replaceNamespacedResourceQuota("compute-resources", tenant.getK8sNamespace(), quota).execute();
                     log.info("Updated resource quota for namespace: {}", tenant.getK8sNamespace());
                 } else {
                     throw e;
@@ -304,39 +303,39 @@ public class TenantService {
     /**
      * Calculate Kubernetes resource limits based on tenant tier
      */
-    private Map<String, String> calculateResourceLimits(Tenant tenant) {
-        Map<String, String> limits = new HashMap<>();
+    private Map<String, io.kubernetes.client.custom.Quantity> calculateResourceLimits(Tenant tenant) {
+        Map<String, io.kubernetes.client.custom.Quantity> limits = new HashMap<>();
 
         switch (tenant.getTier()) {
             case FREE:
-                limits.put("requests.cpu", "2");
-                limits.put("requests.memory", "4Gi");
-                limits.put("limits.cpu", "4");
-                limits.put("limits.memory", "8Gi");
-                limits.put("pods", "20");
+                limits.put("requests.cpu", io.kubernetes.client.custom.Quantity.fromString("2"));
+                limits.put("requests.memory", io.kubernetes.client.custom.Quantity.fromString("4Gi"));
+                limits.put("limits.cpu", io.kubernetes.client.custom.Quantity.fromString("4"));
+                limits.put("limits.memory", io.kubernetes.client.custom.Quantity.fromString("8Gi"));
+                limits.put("pods", io.kubernetes.client.custom.Quantity.fromString("20"));
                 break;
             case STANDARD:
-                limits.put("requests.cpu", "10");
-                limits.put("requests.memory", "20Gi");
-                limits.put("limits.cpu", "20");
-                limits.put("limits.memory", "40Gi");
-                limits.put("pods", "50");
+                limits.put("requests.cpu", io.kubernetes.client.custom.Quantity.fromString("10"));
+                limits.put("requests.memory", io.kubernetes.client.custom.Quantity.fromString("20Gi"));
+                limits.put("limits.cpu", io.kubernetes.client.custom.Quantity.fromString("20"));
+                limits.put("limits.memory", io.kubernetes.client.custom.Quantity.fromString("40Gi"));
+                limits.put("pods", io.kubernetes.client.custom.Quantity.fromString("50"));
                 break;
             case PREMIUM:
-                limits.put("requests.cpu", "50");
-                limits.put("requests.memory", "100Gi");
-                limits.put("requests.nvidia.com/gpu", "2");
-                limits.put("limits.cpu", "100");
-                limits.put("limits.memory", "200Gi");
-                limits.put("pods", "200");
+                limits.put("requests.cpu", io.kubernetes.client.custom.Quantity.fromString("50"));
+                limits.put("requests.memory", io.kubernetes.client.custom.Quantity.fromString("100Gi"));
+                limits.put("requests.nvidia.com/gpu", io.kubernetes.client.custom.Quantity.fromString("2"));
+                limits.put("limits.cpu", io.kubernetes.client.custom.Quantity.fromString("100"));
+                limits.put("limits.memory", io.kubernetes.client.custom.Quantity.fromString("200Gi"));
+                limits.put("pods", io.kubernetes.client.custom.Quantity.fromString("200"));
                 break;
             case ENTERPRISE:
-                limits.put("requests.cpu", "200");
-                limits.put("requests.memory", "400Gi");
-                limits.put("requests.nvidia.com/gpu", "8");
-                limits.put("limits.cpu", "400");
-                limits.put("limits.memory", "800Gi");
-                limits.put("pods", "999");
+                limits.put("requests.cpu", io.kubernetes.client.custom.Quantity.fromString("200"));
+                limits.put("requests.memory", io.kubernetes.client.custom.Quantity.fromString("400Gi"));
+                limits.put("requests.nvidia.com/gpu", io.kubernetes.client.custom.Quantity.fromString("8"));
+                limits.put("limits.cpu", io.kubernetes.client.custom.Quantity.fromString("400"));
+                limits.put("limits.memory", io.kubernetes.client.custom.Quantity.fromString("800Gi"));
+                limits.put("pods", io.kubernetes.client.custom.Quantity.fromString("999"));
                 break;
         }
 
