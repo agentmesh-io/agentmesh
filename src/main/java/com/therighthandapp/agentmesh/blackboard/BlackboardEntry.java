@@ -9,11 +9,25 @@ import java.util.Objects;
  * The Blackboard is the shared memory space where all agents read/write context.
  */
 @Entity
-@Table(name = "blackboard_entries")
+@Table(name = "blackboard_entry",
+       indexes = {
+           @Index(name = "idx_tenant_project", columnList = "tenantId, projectId"),
+           @Index(name = "idx_data_partition", columnList = "dataPartitionKey")
+       })
 public class BlackboardEntry {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    // Multi-tenancy fields
+    @Column(nullable = false)
+    private String tenantId;
+
+    @Column(nullable = false)
+    private String projectId;
+
+    @Column(nullable = false)
+    private String dataPartitionKey; // For database sharding
 
     @Column(nullable = false)
     private String agentId;
@@ -106,6 +120,30 @@ public class BlackboardEntry {
         this.version = version;
     }
 
+    public String getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
+    }
+
+    public String getProjectId() {
+        return projectId;
+    }
+
+    public void setProjectId(String projectId) {
+        this.projectId = projectId;
+    }
+
+    public String getDataPartitionKey() {
+        return dataPartitionKey;
+    }
+
+    public void setDataPartitionKey(String dataPartitionKey) {
+        this.dataPartitionKey = dataPartitionKey;
+    }
+
     public String getParentEntryId() {
         return parentEntryId;
     }
@@ -127,4 +165,3 @@ public class BlackboardEntry {
         return Objects.hash(id);
     }
 }
-
