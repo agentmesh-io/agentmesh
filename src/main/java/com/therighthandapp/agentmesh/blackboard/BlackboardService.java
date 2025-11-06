@@ -1,5 +1,6 @@
 package com.therighthandapp.agentmesh.blackboard;
 
+import com.therighthandapp.agentmesh.mast.MASTDetector;
 import com.therighthandapp.agentmesh.security.AccessControlService;
 import com.therighthandapp.agentmesh.security.TenantContext;
 import org.slf4j.Logger;
@@ -25,6 +26,7 @@ public class BlackboardService {
 
     private final BlackboardRepository repository;
     private final ApplicationEventPublisher eventPublisher;
+    private final MASTDetector mastDetector;
 
     @Value("${agentmesh.multitenancy.enabled:false}")
     private boolean multitenancyEnabled;
@@ -32,9 +34,12 @@ public class BlackboardService {
     @Autowired(required = false)
     private AccessControlService accessControl;
 
-    public BlackboardService(BlackboardRepository repository, ApplicationEventPublisher eventPublisher) {
+    public BlackboardService(BlackboardRepository repository, 
+                            ApplicationEventPublisher eventPublisher,
+                            MASTDetector mastDetector) {
         this.repository = repository;
         this.eventPublisher = eventPublisher;
+        this.mastDetector = mastDetector;
     }
 
     /**
@@ -64,6 +69,9 @@ public class BlackboardService {
 
         log.info("Blackboard: Agent {} posted entry [{}] type={} (tenant={}, project={})",
             agentId, title, entryType, saved.getTenantId(), saved.getProjectId());
+
+        // Analyze for MAST violations
+        mastDetector.analyzeBlackboardEntry(saved);
 
         // Publish event for subscribers
         eventPublisher.publishEvent(new BlackboardEntryPostedEvent(this, saved));

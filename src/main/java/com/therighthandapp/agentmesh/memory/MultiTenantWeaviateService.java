@@ -1,5 +1,6 @@
 package com.therighthandapp.agentmesh.memory;
 
+import com.therighthandapp.agentmesh.mast.MASTDetector;
 import com.therighthandapp.agentmesh.security.AccessControlService;
 import com.therighthandapp.agentmesh.security.TenantContext;
 import io.weaviate.client.Config;
@@ -46,6 +47,9 @@ public class MultiTenantWeaviateService {
 
     @Value("${agentmesh.multitenancy.enabled:false}")
     private boolean multitenancyEnabled;
+
+    @Autowired(required = false)
+    private MASTDetector mastDetector;
 
     @Autowired(required = false)
     private AccessControlService accessControl;
@@ -129,9 +133,22 @@ public class MultiTenantWeaviateService {
      * Only returns results from current tenant's namespace
      */
     public List<MemoryArtifact> search(String query, int limit) {
+        return search(query, limit, null);
+    }
+    
+    /**
+     * Semantic search with multi-tenant filtering and MAST tracking
+     * @param agentId Agent performing the search (for MAST tracking)
+     */
+    public List<MemoryArtifact> search(String query, int limit, String agentId) {
         if (!weaviateEnabled || client == null) {
             log.debug("Weaviate disabled, returning empty search results");
             return Collections.emptyList();
+        }
+        
+        // Track memory query for MAST context loss detection
+        if (mastDetector != null && agentId != null) {
+            mastDetector.trackMemoryQuery(agentId);
         }
 
         // Get tenant context for namespace filtering
