@@ -41,6 +41,45 @@ public class GitHubIntegrationService {
     }
 
     /**
+     * Create a new GitHub repository for a project
+     * 
+     * @param projectName The name of the project
+     * @param projectKey The unique project key
+     * @param description Project description from SRS
+     * @param srsContent The SRS content to add as initial documentation
+     * @return The HTML URL of the created repository
+     */
+    public String createProjectRepository(String projectName, String projectKey, String description, String srsContent) {
+        try {
+            log.info("Creating GitHub repository: {} ({})", projectName, projectKey);
+            
+            // 1. Create repository
+            String repoName = generateRepositoryName(projectName, projectKey);
+            String repoUrl = createRepository(repoName, description);
+            
+            // 2. Initialize with README
+            String readmeContent = generateReadmeContent(projectName, projectKey, description);
+            commitFile("main", "README.md", readmeContent, "Initial commit: Add README");
+            
+            // 3. Add .gitignore for Java projects
+            String gitignoreContent = generateGitignoreContent();
+            commitFile("main", ".gitignore", gitignoreContent, "Add .gitignore for Java/Maven projects");
+            
+            // 4. Add SRS documentation
+            if (srsContent != null && !srsContent.isEmpty()) {
+                commitFile("main", "docs/SRS.md", srsContent, "Add Software Requirements Specification");
+            }
+            
+            log.info("Successfully created repository: {}", repoUrl);
+            return repoUrl;
+            
+        } catch (Exception e) {
+            log.error("Failed to create GitHub repository for project: {}", projectKey, e);
+            return null; // Non-fatal: project can exist without GitHub repo
+        }
+    }
+
+    /**
      * Create a pull request with generated code
      */
     public String createPullRequest(String title, String code, String issueNumber) {
@@ -249,6 +288,208 @@ public class GitHubIntegrationService {
         headers.set("Accept", "application/vnd.github.v3+json");
         headers.setContentType(MediaType.APPLICATION_JSON);
         return headers;
+    }
+    
+    /**
+     * Generate repository name from project name and key
+     */
+    private String generateRepositoryName(String projectName, String projectKey) {
+        // Convert to kebab-case: "E-Commerce Platform" -> "e-commerce-platform"
+        String repoName = projectName.toLowerCase()
+            .replaceAll("[^a-z0-9\\s-]", "") // Remove special chars except spaces and hyphens
+            .replaceAll("\\s+", "-")          // Replace spaces with hyphens
+            .replaceAll("-+", "-")            // Replace multiple hyphens with single
+            .replaceAll("^-|-$", "");         // Remove leading/trailing hyphens
+        
+        // Append project key for uniqueness
+        return repoName + "-" + projectKey.toLowerCase();
+    }
+    
+    /**
+     * Create a new repository on GitHub
+     */
+    private String createRepository(String repoName, String description) {
+        String url = String.format("%s/user/repos", GITHUB_API_BASE);
+        
+        Map<String, Object> body = new HashMap<>();
+        body.put("name", repoName);
+        body.put("description", description != null ? description : "AgentMesh generated project");
+        body.put("private", false);
+        body.put("auto_init", true); // Initialize with README to create main branch
+        body.put("has_issues", true);
+        body.put("has_projects", true);
+        body.put("has_wiki", true);
+        
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, getHeaders());
+        
+        ResponseEntity<Map> response = restTemplate.postForEntity(url, request, Map.class);
+        
+        if (response.getStatusCode() == HttpStatus.CREATED && response.getBody() != null) {
+            String htmlUrl = (String) response.getBody().get("html_url");
+            log.info("Created repository: {}", htmlUrl);
+            
+            // Wait a bit for GitHub to initialize the repository
+            try {
+                Thread.sleep(2000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            
+            return htmlUrl;
+        }
+        
+        throw new RuntimeException("Failed to create repository: " + response.getStatusCode());
+    }
+    
+    /**
+     * Generate README content for the project
+     */
+    private String generateReadmeContent(String projectName, String projectKey, String description) {
+        return String.format("""
+            # %s
+            
+            **Project Key**: `%s`
+            
+            ## Overview
+            
+            %s
+            
+            ## Project Information
+            
+            This project was automatically initialized by **AgentMesh**, an intelligent multi-agent system for software development.
+            
+            ### Development Status
+            
+            - 🤖 **Status**: Active Development
+            - 📋 **Project Key**: %s
+            - 🔧 **Generated**: Automatically via AgentMesh
+            
+            ## Getting Started
+            
+            This project is currently in the initialization phase. Development artifacts will be added as the AgentMesh agents progress through the SDLC workflow.
+            
+            ### Prerequisites
+            
+            - Java 17+
+            - Maven 3.8+
+            - Docker (for containerized services)
+            
+            ### Documentation
+            
+            - [Software Requirements Specification](docs/SRS.md)
+            - [Architecture Documentation](docs/ARCHITECTURE.md) _(Coming Soon)_
+            - [API Documentation](docs/API.md) _(Coming Soon)_
+            
+            ## AgentMesh Integration
+            
+            This project is managed by AgentMesh agents that handle:
+            
+            - 📐 **Planning**: Architecture and design decisions
+            - 💻 **Coding**: Implementation of features
+            - 🔍 **Review**: Code quality and standards
+            - 🧪 **Testing**: Automated test generation
+            - 🚀 **Deployment**: CI/CD pipeline management
+            
+            ## Contributing
+            
+            This is an AgentMesh-managed project. For questions or contributions, please refer to the main AgentMesh documentation.
+            
+            ---
+            
+            _Generated with ❤️ by [AgentMesh](https://github.com/agentmesh)_
+            """, 
+            projectName, 
+            projectKey, 
+            description != null ? description : "A software project generated by AgentMesh intelligent agents.",
+            projectKey
+        );
+    }
+    
+    /**
+     * Generate .gitignore content for Java/Maven projects
+     */
+    private String generateGitignoreContent() {
+        return """
+            # Compiled class files
+            *.class
+            
+            # Log files
+            *.log
+            
+            # BlueJ files
+            *.ctxt
+            
+            # Mobile Tools for Java (J2ME)
+            .mtj.tmp/
+            
+            # Package Files
+            *.jar
+            *.war
+            *.nar
+            *.ear
+            *.zip
+            *.tar.gz
+            *.rar
+            
+            # Virtual machine crash logs
+            hs_err_pid*
+            replay_pid*
+            
+            # Maven
+            target/
+            pom.xml.tag
+            pom.xml.releaseBackup
+            pom.xml.versionsBackup
+            pom.xml.next
+            release.properties
+            dependency-reduced-pom.xml
+            buildNumber.properties
+            .mvn/timing.properties
+            .mvn/wrapper/maven-wrapper.jar
+            
+            # Gradle
+            .gradle
+            build/
+            !gradle/wrapper/gradle-wrapper.jar
+            !**/src/main/**/build/
+            !**/src/test/**/build/
+            
+            # IDE
+            .idea/
+            *.iws
+            *.iml
+            *.ipr
+            .vscode/
+            *.swp
+            *.swo
+            *~
+            .DS_Store
+            
+            # Spring Boot
+            spring-boot-*.log
+            
+            # Environment variables
+            .env
+            .env.local
+            .env.*.local
+            
+            # Docker
+            docker-compose.override.yml
+            
+            # Logs and databases
+            *.log
+            *.sql
+            *.sqlite
+            
+            # OS generated files
+            .DS_Store
+            .DS_Store?
+            ._*
+            .Spotlight-V100
+            .Trashes
+            ehthumbs.db
+            Thumbs.db
+            """;
     }
 }
 

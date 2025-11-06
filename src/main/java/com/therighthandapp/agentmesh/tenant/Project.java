@@ -55,6 +55,10 @@ public class Project {
     @Column
     private Boolean trackCosts = true;
 
+    // Temporal workflow tracking
+    @Column
+    private String workflowId; // Temporal workflow ID for SDLC orchestration
+
     @Column
     private Instant createdAt;
 
@@ -176,6 +180,14 @@ public class Project {
 
     public void setTrackCosts(Boolean trackCosts) {
         this.trackCosts = trackCosts;
+    }
+
+    public String getWorkflowId() {
+        return workflowId;
+    }
+
+    public void setWorkflowId(String workflowId) {
+        this.workflowId = workflowId;
     }
 
     public Instant getCreatedAt() {

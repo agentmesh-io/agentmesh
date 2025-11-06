@@ -11,6 +11,8 @@ public interface ProjectRepository extends JpaRepository<Project, String> {
 
     List<Project> findByTenantId(String tenantId);
 
+    Optional<Project> findByProjectKey(String projectKey);
+
     Optional<Project> findByTenantIdAndProjectKey(String tenantId, String projectKey);
 
     List<Project> findByTenantIdAndStatus(String tenantId, Project.ProjectStatus status);

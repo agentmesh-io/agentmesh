@@ -75,6 +75,7 @@ public class BlackboardService {
      * Read entries by type (for agents to retrieve relevant context)
      * Multi-tenant: Only returns entries within current tenant/project
      */
+    @Transactional(readOnly = true)
     public List<BlackboardEntry> readByType(String entryType) {
         if (multitenancyEnabled) {
             TenantContext context = TenantContext.getOrNull();
@@ -94,6 +95,7 @@ public class BlackboardService {
      * Read all entries ordered by timestamp
      * Multi-tenant: Only returns entries within current tenant/project
      */
+    @Transactional(readOnly = true)
     public List<BlackboardEntry> readAll() {
         if (multitenancyEnabled) {
             TenantContext context = TenantContext.getOrNull();
@@ -112,6 +114,7 @@ public class BlackboardService {
     /**
      * Read entries posted by a specific agent
      */
+    @Transactional(readOnly = true)
     public List<BlackboardEntry> readByAgent(String agentId) {
         return repository.findByAgentId(agentId);
     }

@@ -20,13 +20,13 @@ public class BlackboardEntry {
     private Long id;
 
     // Multi-tenancy fields
-    @Column(nullable = false)
+    @Column(nullable = true)
     private String tenantId;
 
-    @Column(nullable = false)
+    @Column(nullable = true)
     private String projectId;
 
-    @Column(nullable = false)
+    @Column(nullable = true)
     private String dataPartitionKey; // For database sharding
 
     @Column(nullable = false)

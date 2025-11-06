@@ -56,9 +56,62 @@ public class WeaviateService {
     }
 
     private void ensureSchema() {
-        // In production, ensure the schema exists or create it
-        // For now, we assume schema is created externally or by a migration
-        log.debug("Weaviate schema check (stub - implement schema creation if needed)");
+        try {
+            // Check if schema already exists
+            Result<Boolean> existsResult = client.schema().exists().withClassName(SCHEMA_CLASS).run();
+            if (existsResult.getResult() != null && existsResult.getResult()) {
+                log.info("Weaviate schema '{}' already exists", SCHEMA_CLASS);
+                return;
+            }
+
+            // Create schema using WeaviateClass builder
+            // Using text2vec-transformers vectorizer for semantic search
+            io.weaviate.client.v1.schema.model.WeaviateClass weaviateClass = 
+                io.weaviate.client.v1.schema.model.WeaviateClass.builder()
+                    .className(SCHEMA_CLASS)
+                    .description("Memory artifacts for agent long-term memory")
+                    .vectorizer("text2vec-transformers")
+                    .properties(List.of(
+                        io.weaviate.client.v1.schema.model.Property.builder()
+                            .name("agentId")
+                            .dataType(List.of("text"))
+                            .description("ID of the agent that created this artifact")
+                            .build(),
+                        io.weaviate.client.v1.schema.model.Property.builder()
+                            .name("artifactType")
+                            .dataType(List.of("text"))
+                            .description("Type of artifact: SRS, CODE_SNIPPET, FAILURE_LESSON, etc.")
+                            .build(),
+                        io.weaviate.client.v1.schema.model.Property.builder()
+                            .name("title")
+                            .dataType(List.of("text"))
+                            .description("Title of the memory artifact")
+                            .build(),
+                        io.weaviate.client.v1.schema.model.Property.builder()
+                            .name("content")
+                            .dataType(List.of("text"))
+                            .description("Full content of the memory artifact")
+                            .build(),
+                        io.weaviate.client.v1.schema.model.Property.builder()
+                            .name("timestamp")
+                            .dataType(List.of("text"))
+                            .description("ISO-8601 timestamp when artifact was created")
+                            .build()
+                    ))
+                    .build();
+            
+            Result<Boolean> result = client.schema().classCreator()
+                .withClass(weaviateClass)
+                .run();
+            
+            if (result.hasErrors()) {
+                log.error("Failed to create Weaviate schema: {}", result.getError());
+            } else {
+                log.info("Successfully created Weaviate schema '{}'", SCHEMA_CLASS);
+            }
+        } catch (Exception e) {
+            log.error("Exception creating Weaviate schema", e);
+        }
     }
 
     /**
@@ -129,9 +182,35 @@ public class WeaviateService {
             }
 
             // Parse results and convert to MemoryArtifact objects
-            // This is simplified - in production, parse GraphQL response properly
-            log.info("Semantic search returned results for query: {}", query);
-            return Collections.emptyList(); // TODO: parse and return actual results
+            GraphQLResponse response = result.getResult();
+            if (response == null || response.getData() == null) {
+                log.warn("Semantic search returned no data for query: {}", query);
+                return Collections.emptyList();
+            }
+
+            List<MemoryArtifact> artifacts = new ArrayList<>();
+            try {
+                Map<String, Object> data = (Map<String, Object>) response.getData();
+                Map<String, Object> get = (Map<String, Object>) data.get("Get");
+                if (get != null) {
+                    List<Map<String, Object>> results = (List<Map<String, Object>>) get.get(SCHEMA_CLASS);
+                    if (results != null) {
+                        for (Map<String, Object> item : results) {
+                            MemoryArtifact artifact = new MemoryArtifact();
+                            artifact.setAgentId((String) item.get("agentId"));
+                            artifact.setArtifactType((String) item.get("artifactType"));
+                            artifact.setTitle((String) item.get("title"));
+                            artifact.setContent((String) item.get("content"));
+                            artifacts.add(artifact);
+                        }
+                    }
+                }
+            } catch (Exception parseEx) {
+                log.error("Error parsing semantic search results", parseEx);
+            }
+
+            log.info("Semantic search returned {} results for query: {}", artifacts.size(), query);
+            return artifacts;
 
         } catch (Exception e) {
             log.error("Exception during semantic search", e);
@@ -157,12 +236,15 @@ public class WeaviateService {
 
             Field title = Field.builder().name("title").build();
             Field content = Field.builder().name("content").build();
+            Field agentId = Field.builder().name("agentId").build();
+            Field artifactTypeField = Field.builder().name("artifactType").build();
 
+            @SuppressWarnings("deprecation")
             Result<GraphQLResponse> result = client.graphQL().get()
                     .withClassName(SCHEMA_CLASS)
                     .withWhere(filter)
                     .withLimit(limit)
-                    .withFields(title, content)
+                    .withFields(title, content, agentId, artifactTypeField)
                     .run();
 
             if (result.hasErrors()) {
@@ -170,8 +252,36 @@ public class WeaviateService {
                 return Collections.emptyList();
             }
 
-            log.info("Query by type {} returned results", artifactType);
-            return Collections.emptyList(); // TODO: parse results
+            // Parse results and convert to MemoryArtifact objects
+            GraphQLResponse response = result.getResult();
+            if (response == null || response.getData() == null) {
+                log.warn("Query by type {} returned no data", artifactType);
+                return Collections.emptyList();
+            }
+
+            List<MemoryArtifact> artifacts = new ArrayList<>();
+            try {
+                Map<String, Object> data = (Map<String, Object>) response.getData();
+                Map<String, Object> get = (Map<String, Object>) data.get("Get");
+                if (get != null) {
+                    List<Map<String, Object>> results = (List<Map<String, Object>>) get.get(SCHEMA_CLASS);
+                    if (results != null) {
+                        for (Map<String, Object> item : results) {
+                            MemoryArtifact artifact = new MemoryArtifact();
+                            artifact.setAgentId((String) item.get("agentId"));
+                            artifact.setArtifactType((String) item.get("artifactType"));
+                            artifact.setTitle((String) item.get("title"));
+                            artifact.setContent((String) item.get("content"));
+                            artifacts.add(artifact);
+                        }
+                    }
+                }
+            } catch (Exception parseEx) {
+                log.error("Error parsing findByType results", parseEx);
+            }
+
+            log.info("Query by type {} returned {} results", artifactType, artifacts.size());
+            return artifacts;
 
         } catch (Exception e) {
             log.error("Exception querying by type", e);

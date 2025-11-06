@@ -352,6 +352,9 @@ public class TenantService {
         private String dataRegion;
         private Boolean requiresDataLocality = false;
 
+        // Default constructor for Jackson
+        public CreateTenantRequest() {}
+
         // Getters and setters
         public String getName() { return name; }
         public void setName(String name) { this.name = name; }
