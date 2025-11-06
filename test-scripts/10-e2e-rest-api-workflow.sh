@@ -127,60 +127,71 @@ create_project() {
 
 execute_planner() {
     local user_request="$1"
-    print_step "Executing Planner Agent"
+    print_step "Executing Planner Agent" >&2
+    
+    # Create JSON payload using jq to properly escape strings
+    local json_payload=$(jq -n \
+        --arg tenant "$TENANT_ID" \
+        --arg project "$PROJECT_ID" \
+        --arg request "$user_request" \
+        '{tenantId: $tenant, projectId: $project, userRequest: $request}')
     
     response=$(curl -s -X POST "$BASE_URL/agents/execute/planner" \
         -H "Content-Type: application/json" \
-        -d "{
-            \"tenantId\": \"$TENANT_ID\",
-            \"projectId\": \"$PROJECT_ID\",
-            \"userRequest\": \"$user_request\"
-        }")
+        -d "$json_payload")
     
     echo "$response"
 }
 
 execute_implementer() {
     local srs_artifact_id="$1"
-    print_step "Executing Implementer Agent"
+    print_step "Executing Implementer Agent" >&2
+    
+    local json_payload=$(jq -n \
+        --arg tenant "$TENANT_ID" \
+        --arg project "$PROJECT_ID" \
+        --arg srs "$srs_artifact_id" \
+        '{tenantId: $tenant, projectId: $project, srsArtifactId: $srs}')
     
     response=$(curl -s -X POST "$BASE_URL/agents/execute/implementer" \
         -H "Content-Type: application/json" \
-        -d "{
-            \"tenantId\": \"$TENANT_ID\",
-            \"projectId\": \"$PROJECT_ID\",
-            \"srsArtifactId\": \"$srs_artifact_id\"
-        }")
+        -d "$json_payload")
     
     echo "$response"
 }
 
 execute_reviewer() {
     local code_artifact_ids="$1"  # JSON array string
-    print_step "Executing Reviewer Agent"
+    print_step "Executing Reviewer Agent" >&2
+    
+    # code_artifact_ids is already a JSON array, so pass it raw
+    local json_payload=$(jq -n \
+        --arg tenant "$TENANT_ID" \
+        --arg project "$PROJECT_ID" \
+        --argjson ids "$code_artifact_ids" \
+        '{tenantId: $tenant, projectId: $project, codeArtifactIds: $ids}')
     
     response=$(curl -s -X POST "$BASE_URL/agents/execute/reviewer" \
         -H "Content-Type: application/json" \
-        -d "{
-            \"tenantId\": \"$TENANT_ID\",
-            \"projectId\": \"$PROJECT_ID\",
-            \"codeArtifactIds\": $code_artifact_ids
-        }")
+        -d "$json_payload")
     
     echo "$response"
 }
 
 execute_tester() {
     local code_artifact_ids="$1"  # JSON array string
-    print_step "Executing Tester Agent"
+    print_step "Executing Tester Agent" >&2
+    
+    # code_artifact_ids is already a JSON array, so pass it raw
+    local json_payload=$(jq -n \
+        --arg tenant "$TENANT_ID" \
+        --arg project "$PROJECT_ID" \
+        --argjson ids "$code_artifact_ids" \
+        '{tenantId: $tenant, projectId: $project, codeArtifactIds: $ids}')
     
     response=$(curl -s -X POST "$BASE_URL/agents/execute/tester" \
         -H "Content-Type: application/json" \
-        -d "{
-            \"tenantId\": \"$TENANT_ID\",
-            \"projectId\": \"$PROJECT_ID\",
-            \"codeArtifactIds\": $code_artifact_ids
-        }")
+        -d "$json_payload")
     
     echo "$response"
 }
@@ -278,7 +289,13 @@ srs_artifact_id=$(extract_artifact_id "$planner_response")
 planner_duration=$(echo "$planner_response" | jq -r '.durationMs')
 
 assert_equals "$planner_success" "true" "Planner execution succeeded"
-assert_contains "$srs_artifact_id" "tenant_" "SRS artifact ID has correct format"
+# Check for valid UUID format (8-4-4-4-12 hex digits)
+if [[ "$srs_artifact_id" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
+    print_success "SRS artifact ID has valid UUID format"
+else
+    print_failure "SRS artifact ID is not a valid UUID: $srs_artifact_id"
+    exit 1
+fi
 print_success "Planner completed in ${planner_duration}ms"
 print_success "SRS artifact created: $srs_artifact_id"
 
@@ -332,7 +349,13 @@ issues_count=$(echo "$reviewer_response" | jq -r '.metadata.issuesCount')
 review_score=$(echo "$reviewer_response" | jq -r '.metadata.reviewScore')
 
 assert_equals "$reviewer_success" "true" "Reviewer execution succeeded"
-assert_contains "$review_artifact_id" "tenant_" "Review artifact ID has correct format"
+# Check for valid UUID format
+if [[ "$review_artifact_id" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
+    print_success "Review artifact ID has valid UUID format"
+else
+    print_failure "Review artifact ID is not a valid UUID: $review_artifact_id"
+    exit 1
+fi
 print_success "Reviewer completed in ${reviewer_duration}ms"
 print_success "Review Status: $review_status"
 print_success "Issues Found: $issues_count"
