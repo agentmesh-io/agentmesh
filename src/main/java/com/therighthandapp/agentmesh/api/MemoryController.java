@@ -135,6 +135,41 @@ public class MemoryController {
         ));
     }
 
+    /**
+     * Multi-vector search with smart routing based on query length
+     * Routes short queries (≤5 words) to title search, long queries to content search
+     * Enables higher precision for different query types
+     * 
+     * @param request Multi-vector search request with query and parameters
+     * @return List of matching memory artifacts using optimal search strategy
+     */
+    @PostMapping("/multi-vector-search")
+    public ResponseEntity<MultiVectorSearchResponse> multiVectorSearch(@RequestBody MultiVectorSearchRequest request) {
+        if (request.getQuery() == null || request.getQuery().trim().isEmpty()) {
+            return ResponseEntity.badRequest()
+                    .body(new MultiVectorSearchResponse(null, "Query cannot be empty", 0, null));
+        }
+
+        int limit = request.getLimit() > 0 ? request.getLimit() : 10;
+        
+        List<MemoryArtifact> results = weaviateService.multiVectorSearch(
+                request.getQuery(),
+                limit,
+                request.getAgentId()
+        );
+
+        // Determine which strategy was used
+        String[] words = request.getQuery().trim().split("\\s+");
+        String strategyUsed = words.length <= 5 ? "title" : "content";
+
+        return ResponseEntity.ok(new MultiVectorSearchResponse(
+                results,
+                "Multi-vector search completed successfully",
+                results.size(),
+                strategyUsed
+        ));
+    }
+
     // Request/Response DTOs
     public static class StoreResponse {
         private final String id;
@@ -248,6 +283,38 @@ public class MemoryController {
         public String getMessage() { return message; }
         public int getStoredCount() { return storedCount; }
         public long getDurationMs() { return durationMs; }
+    }
+
+    public static class MultiVectorSearchRequest {
+        private String query;
+        private int limit = 10;
+        private String agentId;
+
+        public String getQuery() { return query; }
+        public void setQuery(String query) { this.query = query; }
+        public int getLimit() { return limit; }
+        public void setLimit(int limit) { this.limit = limit; }
+        public String getAgentId() { return agentId; }
+        public void setAgentId(String agentId) { this.agentId = agentId; }
+    }
+
+    public static class MultiVectorSearchResponse {
+        private final List<MemoryArtifact> results;
+        private final String message;
+        private final int count;
+        private final String strategyUsed; // "title" or "content"
+
+        public MultiVectorSearchResponse(List<MemoryArtifact> results, String message, int count, String strategyUsed) {
+            this.results = results;
+            this.message = message;
+            this.count = count;
+            this.strategyUsed = strategyUsed;
+        }
+
+        public List<MemoryArtifact> getResults() { return results; }
+        public String getMessage() { return message; }
+        public int getCount() { return count; }
+        public String getStrategyUsed() { return strategyUsed; }
     }
 }
 

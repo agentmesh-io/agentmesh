@@ -50,6 +50,7 @@ public class WeaviateService {
             client = new WeaviateClient(config);
             log.info("Weaviate client initialized: {}://{}", weaviateScheme, weaviateHost);
             ensureSchema();
+            ensureTitleSchema();
         } catch (Exception e) {
             log.warn("Failed to initialize Weaviate client. Running in mock mode: {}", e.getMessage());
             client = null;
@@ -112,6 +113,68 @@ public class WeaviateService {
             }
         } catch (Exception e) {
             log.error("Exception creating Weaviate schema", e);
+        }
+    }
+
+    /**
+     * Ensure title-only schema exists for multi-vector storage
+     * This enables separate title and content vectors for improved precision
+     */
+    private void ensureTitleSchema() {
+        try {
+            // Check if title schema already exists
+            Result<Boolean> existsResult = client.schema().exists().withClassName(TITLE_CLASS).run();
+            if (existsResult.getResult() != null && existsResult.getResult()) {
+                log.info("Weaviate schema '{}' already exists", TITLE_CLASS);
+                return;
+            }
+
+            // Create title-only schema
+            io.weaviate.client.v1.schema.model.WeaviateClass titleClass = 
+                io.weaviate.client.v1.schema.model.WeaviateClass.builder()
+                    .className(TITLE_CLASS)
+                    .description("Memory artifact titles for focused search")
+                    .vectorizer("text2vec-transformers")
+                    .properties(List.of(
+                        io.weaviate.client.v1.schema.model.Property.builder()
+                            .name("agentId")
+                            .dataType(List.of("text"))
+                            .description("ID of the agent that created this artifact")
+                            .build(),
+                        io.weaviate.client.v1.schema.model.Property.builder()
+                            .name("artifactType")
+                            .dataType(List.of("text"))
+                            .description("Type of artifact")
+                            .build(),
+                        io.weaviate.client.v1.schema.model.Property.builder()
+                            .name("title")
+                            .dataType(List.of("text"))
+                            .description("Title of the memory artifact (vectorized)")
+                            .build(),
+                        io.weaviate.client.v1.schema.model.Property.builder()
+                            .name("artifactId")
+                            .dataType(List.of("text"))
+                            .description("Reference to full artifact ID in main class")
+                            .build(),
+                        io.weaviate.client.v1.schema.model.Property.builder()
+                            .name("timestamp")
+                            .dataType(List.of("text"))
+                            .description("ISO-8601 timestamp")
+                            .build()
+                    ))
+                    .build();
+            
+            Result<Boolean> result = client.schema().classCreator()
+                .withClass(titleClass)
+                .run();
+            
+            if (result.hasErrors()) {
+                log.error("Failed to create title schema: {}", result.getError());
+            } else {
+                log.info("Successfully created Weaviate schema '{}'", TITLE_CLASS);
+            }
+        } catch (Exception e) {
+            log.error("Exception creating title schema", e);
         }
     }
 
@@ -274,6 +337,73 @@ public class WeaviateService {
     }
 
     /**
+     * Store only the title vector for multi-vector search
+     * Enables focused title-based search with higher precision for short queries
+     * 
+     * @param artifact The memory artifact to store
+     * @param fullArtifactId ID of the full artifact in main class
+     * @return ID of the stored title artifact, or null on failure
+     */
+    public String storeTitleOnly(MemoryArtifact artifact, String fullArtifactId) {
+        if (client == null) {
+            log.debug("Mock title store: {}", artifact.getTitle());
+            return UUID.randomUUID().toString();
+        }
+
+        try {
+            Map<String, Object> properties = new HashMap<>();
+            properties.put("agentId", artifact.getAgentId());
+            properties.put("artifactType", artifact.getArtifactType());
+            properties.put("title", artifact.getTitle());
+            properties.put("artifactId", fullArtifactId);
+            properties.put("timestamp", artifact.getTimestamp().toString());
+
+            Result<WeaviateObject> result = client.data().creator()
+                    .withClassName(TITLE_CLASS)
+                    .withProperties(properties)
+                    .run();
+
+            if (result.hasErrors()) {
+                log.error("Failed to store title in Weaviate: {}", result.getError());
+                return null;
+            }
+
+            String id = result.getResult().getId();
+            log.info("Stored title in Weaviate: {} (id={})", artifact.getTitle(), id);
+            return id;
+        } catch (Exception e) {
+            log.error("Exception storing title in Weaviate", e);
+            return null;
+        }
+    }
+
+    /**
+     * Store artifact in both main class (full content) and title class (title only)
+     * Enables multi-vector search strategy for improved precision
+     * 
+     * @param artifact The memory artifact to store
+     * @return ID of the full artifact, or null on failure
+     */
+    public String storeWithMultiVector(MemoryArtifact artifact) {
+        // Store full artifact first
+        String fullId = store(artifact);
+        if (fullId == null) {
+            log.error("Failed to store full artifact: {}", artifact.getTitle());
+            return null;
+        }
+
+        // Store title-only version with reference to full artifact
+        String titleId = storeTitleOnly(artifact, fullId);
+        if (titleId == null) {
+            log.warn("Failed to store title for artifact: {} (full artifact stored as {})", 
+                    artifact.getTitle(), fullId);
+            // Still return fullId since main artifact was stored successfully
+        }
+
+        return fullId;
+    }
+
+    /**
      * Retrieve artifacts by semantic similarity (RAG query)
      */
     public List<MemoryArtifact> semanticSearch(String query, int limit) {
@@ -413,11 +543,150 @@ public class WeaviateService {
     }
 
     /**
+     * Search title-only class for focused title matching
+     * Best for short queries (1-5 words) where title precision is important
+     * 
+     * @param query Search query string
+     * @param limit Maximum number of results
+     * @param agentId Agent ID for filtering (optional)
+     * @return List of matching artifacts
+     */
+    public List<MemoryArtifact> searchTitleClass(String query, int limit, String agentId) {
+        if (client == null) {
+            log.debug("Mock title search for: {}", query);
+            return Collections.emptyList();
+        }
+
+        try {
+            Field title = Field.builder().name("title").build();
+            Field agentIdField = Field.builder().name("agentId").build();
+            Field artifactType = Field.builder().name("artifactType").build();
+            Field artifactId = Field.builder().name("artifactId").build();
+
+            NearTextArgument nearText = NearTextArgument.builder()
+                    .concepts(new String[]{query})
+                    .build();
+
+            var queryBuilder = client.graphQL().get()
+                    .withClassName(TITLE_CLASS)
+                    .withNearText(nearText)
+                    .withLimit(limit)
+                    .withFields(title, agentIdField, artifactType, artifactId);
+
+            // Add agent filter if provided
+            if (agentId != null && !agentId.isEmpty()) {
+                WhereFilter agentFilter = WhereFilter.builder()
+                        .path(new String[]{"agentId"})
+                        .operator(Operator.Equal)
+                        .valueText(agentId)
+                        .build();
+                queryBuilder = queryBuilder.withWhere(agentFilter);
+            }
+
+            @SuppressWarnings("deprecation")
+            Result<GraphQLResponse> result = queryBuilder.run();
+
+            if (result.hasErrors()) {
+                log.error("Title search failed: {}", result.getError());
+                return Collections.emptyList();
+            }
+
+            return parseTitleSearchResults(result.getResult());
+
+        } catch (Exception e) {
+            log.error("Exception during title search", e);
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * Search content class (main class) for full content matching
+     * Best for longer queries (5+ words) where content semantic understanding is important
+     * 
+     * @param query Search query string
+     * @param limit Maximum number of results
+     * @param agentId Agent ID for filtering (optional)
+     * @return List of matching artifacts
+     */
+    public List<MemoryArtifact> searchContentClass(String query, int limit, String agentId) {
+        // This is the same as regular semantic search on main class
+        return semanticSearch(query, limit);
+    }
+
+    /**
+     * Multi-vector search with smart routing based on query length
+     * Routes short queries to title search, long queries to content search
+     * 
+     * @param query Search query string
+     * @param limit Maximum number of results
+     * @param agentId Agent ID for filtering (optional)
+     * @return List of matching artifacts
+     */
+    public List<MemoryArtifact> multiVectorSearch(String query, int limit, String agentId) {
+        if (client == null) {
+            log.debug("Mock multi-vector search for: {}", query);
+            return Collections.emptyList();
+        }
+
+        // Smart routing: short queries (≤5 words) → title search, long queries → content search
+        String[] words = query.trim().split("\\s+");
+        boolean useTitle = words.length <= 5;
+
+        log.info("Multi-vector search: query='{}' ({} words) -> using {} class", 
+                query, words.length, useTitle ? "title" : "content");
+
+        if (useTitle) {
+            return searchTitleClass(query, limit, agentId);
+        } else {
+            return searchContentClass(query, limit, agentId);
+        }
+    }
+
+    /**
+     * Parse title search results from GraphQL response
+     */
+    private List<MemoryArtifact> parseTitleSearchResults(GraphQLResponse response) {
+        if (response == null || response.getData() == null) {
+            return Collections.emptyList();
+        }
+
+        List<MemoryArtifact> artifacts = new ArrayList<>();
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> data = (Map<String, Object>) response.getData();
+            @SuppressWarnings("unchecked")
+            Map<String, Object> get = (Map<String, Object>) data.get("Get");
+            
+            if (get != null) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> results = (List<Map<String, Object>>) get.get(TITLE_CLASS);
+                
+                if (results != null) {
+                    for (Map<String, Object> item : results) {
+                        MemoryArtifact artifact = new MemoryArtifact();
+                        artifact.setTitle((String) item.get("title"));
+                        artifact.setAgentId((String) item.get("agentId"));
+                        artifact.setArtifactType((String) item.get("artifactType"));
+                        // Note: artifactId contains reference to full artifact
+                        // Could be used to fetch full content if needed
+                        artifacts.add(artifact);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.error("Error parsing title search results", e);
+        }
+
+        return artifacts;
+    }
+
+    /**
      * Hybrid search combining BM25 keyword matching with vector semantic search
      * @param query Search query string
      * @param limit Maximum number of results
      * @param alpha Balance between BM25 (0.0) and vector (1.0). Default 0.75 for balanced hybrid.
      * @param agentId Agent ID for tracking (optional)
+```
      * @return List of memory artifacts ranked by hybrid relevance
      */
     public List<MemoryArtifact> hybridSearch(String query, int limit, double alpha, String agentId) {
