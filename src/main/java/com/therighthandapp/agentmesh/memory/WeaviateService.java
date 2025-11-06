@@ -288,5 +288,199 @@ public class WeaviateService {
             return Collections.emptyList();
         }
     }
+
+    /**
+     * Hybrid search combining BM25 keyword matching with vector semantic search
+     * @param query Search query string
+     * @param limit Maximum number of results
+     * @param alpha Balance between BM25 (0.0) and vector (1.0). Default 0.75 for balanced hybrid.
+     * @param agentId Agent ID for tracking (optional)
+     * @return List of memory artifacts ranked by hybrid relevance
+     */
+    public List<MemoryArtifact> hybridSearch(String query, int limit, double alpha, String agentId) {
+        if (client == null) {
+            log.debug("Mock hybrid search for: {}", query);
+            return Collections.emptyList();
+        }
+
+        // Validate alpha parameter
+        if (alpha < 0.0 || alpha > 1.0) {
+            log.warn("Invalid alpha {}, defaulting to 0.75", alpha);
+            alpha = 0.75;
+        }
+
+        try {
+            Field title = Field.builder().name("title").build();
+            Field content = Field.builder().name("content").build();
+            Field agentIdField = Field.builder().name("agentId").build();
+            Field artifactType = Field.builder().name("artifactType").build();
+
+            io.weaviate.client.v1.graphql.query.argument.HybridArgument hybridArg =
+                    io.weaviate.client.v1.graphql.query.argument.HybridArgument.builder()
+                            .query(query)
+                            .alpha((float) alpha)
+                            .build();
+
+            Result<GraphQLResponse> result = client.graphQL().get()
+                    .withClassName(SCHEMA_CLASS)
+                    .withHybrid(hybridArg)
+                    .withLimit(limit)
+                    .withFields(title, content, agentIdField, artifactType)
+                    .run();
+
+            if (result.hasErrors()) {
+                log.error("Hybrid search failed: {}", result.getError());
+                return Collections.emptyList();
+            }
+
+            GraphQLResponse response = result.getResult();
+            if (response == null || response.getData() == null) {
+                log.warn("Hybrid search returned no data for query: {}", query);
+                return Collections.emptyList();
+            }
+
+            List<MemoryArtifact> artifacts = parseSearchResults(response);
+            log.info("Hybrid search (alpha={}) returned {} results for query: {}", alpha, artifacts.size(), query);
+            return artifacts;
+
+        } catch (Exception e) {
+            log.error("Exception during hybrid search", e);
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * Advanced search with metadata filters and optional hybrid mode
+     * @param query Search query string
+     * @param limit Maximum number of results
+     * @param filters Map of filter criteria (artifactType, agentId, etc.)
+     * @param useHybrid Whether to use hybrid search (true) or pure vector (false)
+     * @param alpha Hybrid balance parameter (0.0-1.0)
+     * @param agentId Agent ID for tracking (optional)
+     * @return List of memory artifacts matching filters
+     */
+    public List<MemoryArtifact> searchWithFilters(String query, int limit, 
+                                                   Map<String, Object> filters,
+                                                   boolean useHybrid, double alpha,
+                                                   String agentId) {
+        if (client == null) {
+            log.debug("Mock filtered search for: {}", query);
+            return Collections.emptyList();
+        }
+
+        if (useHybrid && (alpha < 0.0 || alpha > 1.0)) {
+            log.warn("Invalid alpha {}, defaulting to 0.75", alpha);
+            alpha = 0.75;
+        }
+
+        try {
+            Field title = Field.builder().name("title").build();
+            Field content = Field.builder().name("content").build();
+            Field agentIdField = Field.builder().name("agentId").build();
+            Field artifactType = Field.builder().name("artifactType").build();
+
+            // Build query with hybrid or vector search
+            var queryBuilder = client.graphQL().get()
+                    .withClassName(SCHEMA_CLASS)
+                    .withLimit(limit)
+                    .withFields(title, content, agentIdField, artifactType);
+
+            if (useHybrid) {
+                io.weaviate.client.v1.graphql.query.argument.HybridArgument hybridArg =
+                        io.weaviate.client.v1.graphql.query.argument.HybridArgument.builder()
+                                .query(query)
+                                .alpha((float) alpha)
+                                .build();
+                queryBuilder = queryBuilder.withHybrid(hybridArg);
+            } else {
+                NearTextArgument nearText = NearTextArgument.builder()
+                        .concepts(new String[]{query})
+                        .build();
+                queryBuilder = queryBuilder.withNearText(nearText);
+            }
+
+            // Apply filters if provided
+            if (filters != null && !filters.isEmpty()) {
+                List<WhereFilter> whereFilters = new ArrayList<>();
+
+                if (filters.containsKey("artifactType")) {
+                    whereFilters.add(WhereFilter.builder()
+                            .path(new String[]{"artifactType"})
+                            .operator(Operator.Equal)
+                            .valueText((String) filters.get("artifactType"))
+                            .build());
+                }
+
+                if (filters.containsKey("agentId")) {
+                    whereFilters.add(WhereFilter.builder()
+                            .path(new String[]{"agentId"})
+                            .operator(Operator.Equal)
+                            .valueText((String) filters.get("agentId"))
+                            .build());
+                }
+
+                // Combine filters with AND operator
+                if (whereFilters.size() == 1) {
+                    queryBuilder = queryBuilder.withWhere(whereFilters.get(0));
+                } else if (whereFilters.size() > 1) {
+                    WhereFilter combinedFilter = WhereFilter.builder()
+                            .operator(Operator.And)
+                            .operands(whereFilters.toArray(new WhereFilter[0]))
+                            .build();
+                    queryBuilder = queryBuilder.withWhere(combinedFilter);
+                }
+            }
+
+            Result<GraphQLResponse> result = queryBuilder.run();
+
+            if (result.hasErrors()) {
+                log.error("Filtered search failed: {}", result.getError());
+                return Collections.emptyList();
+            }
+
+            GraphQLResponse response = result.getResult();
+            if (response == null || response.getData() == null) {
+                log.warn("Filtered search returned no data");
+                return Collections.emptyList();
+            }
+
+            List<MemoryArtifact> artifacts = parseSearchResults(response);
+            log.info("Filtered search returned {} results (hybrid={}, filters={})", 
+                    artifacts.size(), useHybrid, filters);
+            return artifacts;
+
+        } catch (Exception e) {
+            log.error("Exception during filtered search", e);
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * Helper method to parse Weaviate GraphQL response into MemoryArtifact list
+     */
+    @SuppressWarnings("unchecked")
+    private List<MemoryArtifact> parseSearchResults(GraphQLResponse response) {
+        List<MemoryArtifact> artifacts = new ArrayList<>();
+        try {
+            Map<String, Object> data = (Map<String, Object>) response.getData();
+            Map<String, Object> get = (Map<String, Object>) data.get("Get");
+            if (get != null) {
+                List<Map<String, Object>> results = (List<Map<String, Object>>) get.get(SCHEMA_CLASS);
+                if (results != null) {
+                    for (Map<String, Object> item : results) {
+                        MemoryArtifact artifact = new MemoryArtifact();
+                        artifact.setAgentId((String) item.get("agentId"));
+                        artifact.setArtifactType((String) item.get("artifactType"));
+                        artifact.setTitle((String) item.get("title"));
+                        artifact.setContent((String) item.get("content"));
+                        artifacts.add(artifact);
+                    }
+                }
+            }
+        } catch (Exception parseEx) {
+            log.error("Error parsing search results", parseEx);
+        }
+        return artifacts;
+    }
 }
 
