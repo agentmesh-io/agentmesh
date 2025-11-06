@@ -25,6 +25,7 @@ import java.util.*;
 public class WeaviateService {
     private static final Logger log = LoggerFactory.getLogger(WeaviateService.class);
     private static final String SCHEMA_CLASS = "MemoryArtifact";
+    private static final String TITLE_CLASS = "MemoryArtifactTitle";
 
     @Value("${agentmesh.weaviate.host:localhost:8080}")
     private String weaviateHost;
