@@ -6,6 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * REST API for Long-Term Memory (Weaviate) operations
@@ -24,6 +25,35 @@ public class MemoryController {
     public ResponseEntity<StoreResponse> storeArtifact(@RequestBody MemoryArtifact artifact) {
         String id = weaviateService.store(artifact);
         return ResponseEntity.ok(new StoreResponse(id));
+    }
+
+    /**
+     * Store multiple memory artifacts in batch for improved performance
+     * Uses Weaviate's batch API which is ~10x faster than individual inserts
+     * @param request Batch storage request with list of artifacts
+     * @return Batch storage response with stored artifact IDs
+     */
+    @PostMapping("/artifacts/batch")
+    public ResponseEntity<BatchStoreResponse> storeArtifactsBatch(@RequestBody BatchStoreRequest request) {
+        if (request.getArtifacts() == null || request.getArtifacts().isEmpty()) {
+            return ResponseEntity.badRequest()
+                    .body(new BatchStoreResponse(null, "Artifacts list cannot be empty", 0, 0));
+        }
+
+        long startTime = System.currentTimeMillis();
+        
+        // Use auto-split batch storage for optimal performance
+        int batchSize = request.getBatchSize() > 0 ? request.getBatchSize() : 50;
+        int storedCount = weaviateService.storeBatchWithAutoSplit(request.getArtifacts(), batchSize);
+        
+        long duration = System.currentTimeMillis() - startTime;
+
+        return ResponseEntity.ok(new BatchStoreResponse(
+                null, // We don't return IDs for batch to reduce response size
+                "Batch storage completed successfully",
+                storedCount,
+                duration
+        ));
     }
 
     @GetMapping("/search")
@@ -189,6 +219,35 @@ public class MemoryController {
         public List<MemoryArtifact> getResults() { return results; }
         public String getMessage() { return message; }
         public int getCount() { return count; }
+    }
+
+    public static class BatchStoreRequest {
+        private List<MemoryArtifact> artifacts;
+        private int batchSize = 50; // Default batch size
+
+        public List<MemoryArtifact> getArtifacts() { return artifacts; }
+        public void setArtifacts(List<MemoryArtifact> artifacts) { this.artifacts = artifacts; }
+        public int getBatchSize() { return batchSize; }
+        public void setBatchSize(int batchSize) { this.batchSize = batchSize; }
+    }
+
+    public static class BatchStoreResponse {
+        private final Map<String, String> ids; // Can be null for large batches
+        private final String message;
+        private final int storedCount;
+        private final long durationMs;
+
+        public BatchStoreResponse(Map<String, String> ids, String message, int storedCount, long durationMs) {
+            this.ids = ids;
+            this.message = message;
+            this.storedCount = storedCount;
+            this.durationMs = durationMs;
+        }
+
+        public Map<String, String> getIds() { return ids; }
+        public String getMessage() { return message; }
+        public int getStoredCount() { return storedCount; }
+        public long getDurationMs() { return durationMs; }
     }
 }
 

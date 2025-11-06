@@ -151,6 +151,128 @@ public class WeaviateService {
     }
 
     /**
+     * Store multiple memory artifacts in batch for improved performance
+     * Uses Weaviate's batch API which is ~10x faster than individual inserts
+     * 
+     * @param artifacts List of memory artifacts to store
+     * @return Map of artifact titles to their IDs, or empty map on failure
+     */
+    public Map<String, String> storeBatch(List<MemoryArtifact> artifacts) {
+        if (client == null) {
+            log.debug("Mock batch store: {} artifacts", artifacts.size());
+            Map<String, String> mockResults = new HashMap<>();
+            for (MemoryArtifact artifact : artifacts) {
+                mockResults.put(artifact.getTitle(), UUID.randomUUID().toString());
+            }
+            return mockResults;
+        }
+
+        if (artifacts == null || artifacts.isEmpty()) {
+            log.warn("No artifacts provided for batch storage");
+            return Collections.emptyMap();
+        }
+
+        Map<String, String> results = new HashMap<>();
+        long startTime = System.currentTimeMillis();
+
+        try {
+            // Build batch with all artifacts
+            List<Map<String, Object>> objects = new ArrayList<>();
+            
+            for (MemoryArtifact artifact : artifacts) {
+                Map<String, Object> properties = new HashMap<>();
+                properties.put("agentId", artifact.getAgentId());
+                properties.put("artifactType", artifact.getArtifactType());
+                properties.put("title", artifact.getTitle());
+                properties.put("content", artifact.getContent());
+                properties.put("timestamp", artifact.getTimestamp().toString());
+                objects.add(properties);
+            }
+
+            // Execute batch operation using Weaviate batch creator
+            var batchBuilder = client.batch().objectsBatcher();
+            for (int i = 0; i < objects.size(); i++) {
+                batchBuilder = batchBuilder.withObjects(
+                    WeaviateObject.builder()
+                        .className(SCHEMA_CLASS)
+                        .properties(objects.get(i))
+                        .build()
+                );
+            }
+            
+            Result<io.weaviate.client.v1.batch.model.ObjectGetResponse[]> result = batchBuilder.run();
+
+            if (result.hasErrors()) {
+                log.error("Batch storage failed: {}", result.getError());
+                return Collections.emptyMap();
+            }
+
+            // Map results back to artifacts
+            io.weaviate.client.v1.batch.model.ObjectGetResponse[] responses = result.getResult();
+            if (responses != null && responses.length == artifacts.size()) {
+                for (int i = 0; i < artifacts.size(); i++) {
+                    String id = responses[i].getId();
+                    String title = artifacts.get(i).getTitle();
+                    results.put(title, id);
+                }
+            }
+
+            long duration = System.currentTimeMillis() - startTime;
+            log.info("Batch stored {} artifacts in {}ms (avg: {}ms per artifact)", 
+                    artifacts.size(), duration, duration / artifacts.size());
+
+        } catch (Exception e) {
+            log.error("Exception during batch storage", e);
+            return Collections.emptyMap();
+        }
+
+        return results;
+    }
+
+    /**
+     * Store multiple artifacts with automatic batching
+     * Splits large lists into optimal batch sizes for Weaviate
+     * 
+     * @param artifacts List of memory artifacts to store
+     * @param batchSize Number of artifacts per batch (recommended: 50-100)
+     * @return Total count of successfully stored artifacts
+     */
+    public int storeBatchWithAutoSplit(List<MemoryArtifact> artifacts, int batchSize) {
+        if (artifacts == null || artifacts.isEmpty()) {
+            return 0;
+        }
+
+        // Validate batch size
+        if (batchSize <= 0 || batchSize > 200) {
+            log.warn("Invalid batch size {}, using default 50", batchSize);
+            batchSize = 50;
+        }
+
+        int totalStored = 0;
+        int totalBatches = (int) Math.ceil((double) artifacts.size() / batchSize);
+        
+        log.info("Storing {} artifacts in {} batches of size {}", 
+                artifacts.size(), totalBatches, batchSize);
+
+        // Process in batches
+        for (int i = 0; i < artifacts.size(); i += batchSize) {
+            int end = Math.min(i + batchSize, artifacts.size());
+            List<MemoryArtifact> batch = artifacts.subList(i, end);
+            
+            Map<String, String> batchResults = storeBatch(batch);
+            totalStored += batchResults.size();
+            
+            log.debug("Batch {}/{}: stored {}/{} artifacts", 
+                    (i / batchSize) + 1, totalBatches, batchResults.size(), batch.size());
+        }
+
+        log.info("Batch storage complete: {}/{} artifacts stored successfully", 
+                totalStored, artifacts.size());
+        
+        return totalStored;
+    }
+
+    /**
      * Retrieve artifacts by semantic similarity (RAG query)
      */
     public List<MemoryArtifact> semanticSearch(String query, int limit) {
