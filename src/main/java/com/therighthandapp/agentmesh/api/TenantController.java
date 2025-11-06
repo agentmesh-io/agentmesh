@@ -118,6 +118,21 @@ public class TenantController {
     }
 
     /**
+     * Cleanup test data (for testing purposes)
+     * DELETE /api/tenants/cleanup?orgIdPattern=pattern1,pattern2
+     */
+    @DeleteMapping("/cleanup")
+    public ResponseEntity<CleanupResponse> cleanupTestData(@RequestParam String orgIdPattern) {
+        try {
+            String[] patterns = orgIdPattern.split(",");
+            int deleted = tenantService.cleanupTestTenants(patterns);
+            return ResponseEntity.ok(new CleanupResponse(deleted));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    /**
      * DTO for tier update
      */
     public static class TierUpdateRequest {
@@ -129,6 +144,25 @@ public class TenantController {
 
         public void setTier(Tenant.TenantTier tier) {
             this.tier = tier;
+        }
+    }
+
+    /**
+     * DTO for cleanup response
+     */
+    public static class CleanupResponse {
+        private int deleted;
+
+        public CleanupResponse(int deleted) {
+            this.deleted = deleted;
+        }
+
+        public int getDeleted() {
+            return deleted;
+        }
+
+        public void setDeleted(int deleted) {
+            this.deleted = deleted;
         }
     }
 }

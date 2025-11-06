@@ -14,6 +14,12 @@ echo "Test 1: Tenant Management"
 echo "=================================="
 echo ""
 
+# Cleanup: Remove test data from previous runs
+echo "→ Cleanup: Removing test data from previous runs..."
+CLEANUP_RESPONSE=$(curl -s -X DELETE "${BASE_URL}/api/tenants/cleanup?orgIdPattern=org-test-,org-upgrade-test" || echo "{\"deleted\":0}")
+echo "✓ Cleanup complete"
+echo ""
+
 # Test 1.1: Create a new tenant (FREE tier)
 echo "→ Test 1.1: Creating new tenant (FREE tier)..."
 RESPONSE=$(curl -s -X POST ${BASE_URL}/api/tenants \

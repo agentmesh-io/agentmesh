@@ -145,6 +145,40 @@ public class TenantService {
     }
 
     /**
+     * Cleanup test tenants by organization ID patterns (for testing purposes)
+     */
+    @Transactional
+    public int cleanupTestTenants(String[] orgIdPatterns) {
+        log.info("Cleaning up test tenants with patterns: {}", String.join(", ", orgIdPatterns));
+        
+        int deletedCount = 0;
+        for (String pattern : orgIdPatterns) {
+            // Trim whitespace
+            final String cleanPattern = pattern.trim();
+            
+            // Find tenants matching the pattern
+            java.util.List<Tenant> tenantsToDelete = tenantRepository.findAll().stream()
+                .filter(t -> t.getOrganizationId() != null && t.getOrganizationId().startsWith(cleanPattern))
+                .toList();
+            
+            for (Tenant tenant : tenantsToDelete) {
+                // Delete associated projects first (due to foreign key)
+                java.util.List<Project> projects = projectRepository.findByTenantId(tenant.getId());
+                projectRepository.deleteAll(projects);
+                log.debug("Deleted {} projects for tenant {}", projects.size(), tenant.getOrganizationId());
+                
+                // Delete tenant
+                tenantRepository.delete(tenant);
+                log.debug("Deleted tenant: {}", tenant.getOrganizationId());
+                deletedCount++;
+            }
+        }
+        
+        log.info("Cleanup complete: deleted {} tenants", deletedCount);
+        return deletedCount;
+    }
+
+    /**
      * Create project within tenant
      */
     @Transactional
