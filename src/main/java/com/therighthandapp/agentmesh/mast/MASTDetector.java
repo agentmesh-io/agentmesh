@@ -48,10 +48,13 @@ public class MASTDetector {
         // Store entry for later analysis
         recentEntries.put(entry.getId() + "", entry);
 
+        // FM-1.2: Role Violation Detection
+        detectRoleViolation(entry);
+
         // FM-1.3: Context Loss Detection
         detectContextLoss(entry);
 
-        // FM-1.2: Ambiguous Language Detection
+        // FM-1.1: Ambiguous Language Detection
         detectAmbiguousLanguage(entry);
 
         // FM-3.1: Test Coverage Below Threshold
@@ -103,6 +106,145 @@ public class MASTDetector {
             log.warn("Detected FM-1.4 Context Loss: Agent {} posted without memory query", agentId);
         }
     }
+
+    /**
+     * FM-1.2: Role Violation Detection
+     * Agent performs work outside its designated role
+     */
+    private void detectRoleViolation(BlackboardEntry entry) {
+        String agentId = entry.getAgentId();
+        String entryType = entry.getEntryType();
+        String content = entry.getContent();
+        
+        if (content == null || agentId == null) {
+            return;
+        }
+
+        // Define role expectations based on agent ID patterns
+        AgentRole expectedRole = inferAgentRole(agentId);
+        if (expectedRole == AgentRole.UNKNOWN) {
+            return; // Can't validate unknown agents
+        }
+
+        // Check if entry type matches agent's role
+        boolean roleViolation = false;
+        String violationReason = null;
+
+        switch (expectedRole) {
+            case PLANNER:
+                // Planner should only create SRS and TASK_BREAKDOWN
+                if ("CODE".equals(entryType)) {
+                    roleViolation = true;
+                    violationReason = "Planner agent writing code instead of planning";
+                } else if ("REVIEW".equals(entryType)) {
+                    roleViolation = true;
+                    violationReason = "Planner agent reviewing code instead of planning";
+                } else if ("TEST_RESULT".equals(entryType)) {
+                    roleViolation = true;
+                    violationReason = "Planner agent running tests instead of planning";
+                }
+                break;
+
+            case IMPLEMENTER:
+                // Implementer should only create CODE entries
+                if ("SRS".equals(entryType) || "TASK_BREAKDOWN".equals(entryType)) {
+                    roleViolation = true;
+                    violationReason = "Implementer agent planning instead of implementing";
+                } else if ("REVIEW".equals(entryType)) {
+                    roleViolation = true;
+                    violationReason = "Implementer agent reviewing instead of implementing";
+                } else if ("TEST_RESULT".equals(entryType)) {
+                    roleViolation = true;
+                    violationReason = "Implementer agent testing instead of implementing";
+                }
+                break;
+
+            case REVIEWER:
+                // Reviewer should only create REVIEW entries
+                if ("CODE".equals(entryType)) {
+                    roleViolation = true;
+                    violationReason = "Reviewer agent writing code instead of reviewing";
+                } else if ("SRS".equals(entryType) || "TASK_BREAKDOWN".equals(entryType)) {
+                    roleViolation = true;
+                    violationReason = "Reviewer agent planning instead of reviewing";
+                } else if ("TEST_RESULT".equals(entryType)) {
+                    roleViolation = true;
+                    violationReason = "Reviewer agent testing instead of reviewing";
+                }
+                break;
+
+            case TESTER:
+                // Tester should only create TEST_RESULT entries
+                if ("CODE".equals(entryType)) {
+                    roleViolation = true;
+                    violationReason = "Tester agent writing code instead of testing";
+                } else if ("SRS".equals(entryType) || "TASK_BREAKDOWN".equals(entryType)) {
+                    roleViolation = true;
+                    violationReason = "Tester agent planning instead of testing";
+                } else if ("REVIEW".equals(entryType)) {
+                    roleViolation = true;
+                    violationReason = "Tester agent reviewing instead of testing";
+                }
+                break;
+
+            case UNKNOWN:
+            default:
+                // Can't validate unknown roles
+                return;
+        }
+
+        if (roleViolation) {
+            String evidence = String.format(
+                "%s. Agent %s (role: %s) posted %s entry '%s'. " +
+                "This violates role separation and may lead to confusion and quality issues.",
+                violationReason, agentId, expectedRole, entryType, entry.getTitle()
+            );
+            
+            MASTViolation violation = new MASTViolation(
+                agentId,
+                MASTFailureMode.FM_1_2_ROLE_VIOLATION,
+                String.valueOf(entry.getId()),
+                evidence
+            );
+
+            violationRepository.save(violation);
+            log.warn("Detected FM-1.2 Role Violation: {} - {}", agentId, violationReason);
+        }
+    }
+
+    /**
+     * Infer agent role from agent ID
+     */
+    private AgentRole inferAgentRole(String agentId) {
+        if (agentId == null) {
+            return AgentRole.UNKNOWN;
+        }
+        
+        String lowerAgentId = agentId.toLowerCase();
+        if (lowerAgentId.contains("planner")) {
+            return AgentRole.PLANNER;
+        } else if (lowerAgentId.contains("implementer") || lowerAgentId.contains("developer")) {
+            return AgentRole.IMPLEMENTER;
+        } else if (lowerAgentId.contains("reviewer")) {
+            return AgentRole.REVIEWER;
+        } else if (lowerAgentId.contains("tester")) {
+            return AgentRole.TESTER;
+        }
+        
+        return AgentRole.UNKNOWN;
+    }
+
+    /**
+     * Agent roles in the system
+     */
+    private enum AgentRole {
+        PLANNER,      // Creates SRS, TASK_BREAKDOWN
+        IMPLEMENTER,  // Creates CODE
+        REVIEWER,     // Creates REVIEW
+        TESTER,       // Creates TEST_RESULT
+        UNKNOWN
+    }
+
 
     /**
      * FM-1.2: Ambiguous Language Detection
