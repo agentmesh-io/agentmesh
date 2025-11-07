@@ -208,7 +208,7 @@ extract_artifact_ids_array() {
 
 query_memory_by_project() {
     local project_id="$1"
-    print_step "Querying memory artifacts for project: $project_id"
+    print_step "Querying memory artifacts for project: $project_id" >&2
     
     # Use hybrid search with project ID
     response=$(curl -s -X POST "$BASE_URL/memory/hybrid-search" \
@@ -230,7 +230,7 @@ count_memory_artifacts() {
 
 query_blackboard_posts() {
     local project_id="$1"
-    print_step "Querying blackboard posts for project: $project_id"
+    print_step "Querying blackboard posts for project: $project_id" >&2
     
     response=$(curl -s "$BASE_URL/blackboard/entries")
     echo "$response"
@@ -245,7 +245,7 @@ count_blackboard_posts_for_project() {
 
 check_mast_violations() {
     local project_id="$1"
-    print_step "Checking MAST violations for project: $project_id"
+    print_step "Checking MAST violations for project: $project_id" >&2
     
     response=$(curl -s "$BASE_URL/mast/check?projectId=$project_id")
     # Return count of violations
