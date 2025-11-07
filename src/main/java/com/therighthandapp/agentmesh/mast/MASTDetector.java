@@ -57,6 +57,9 @@ public class MASTDetector {
         // FM-1.3: Step Repetition Detection
         detectStepRepetition(entry);
 
+        // FM-2.1: Coordination Failure Detection
+        detectCoordinationFailure(entry);
+
         // FM-1.4: Context Loss Detection
         detectContextLoss(entry);
 
@@ -314,6 +317,141 @@ public class MASTDetector {
             violationRepository.save(violation);
             log.warn("Detected FM-1.3 Step Repetition: Agent {} repeated '{}' {} times consecutively",
                 agentId, action, consecutiveCount);
+        }
+    }
+
+    /**
+     * FM-2.1: Coordination Failure Detection
+     * Detect conflicting decisions between agents on the same topic
+     */
+    private void detectCoordinationFailure(BlackboardEntry entry) {
+        String content = entry.getContent();
+        String entryType = entry.getEntryType();
+        
+        if (content == null || entryType == null) {
+            return;
+        }
+
+        // Only check design/planning entries where conflicts are most critical
+        if (!("SRS".equals(entryType) || "TASK_BREAKDOWN".equals(entryType) || "CODE".equals(entryType))) {
+            return;
+        }
+
+        String lowerContent = content.toLowerCase();
+        
+        // Define conflict patterns - pairs of mutually exclusive decisions
+        String[][] conflictPatterns = {
+            // API Style conflicts
+            {"rest", "graphql"},
+            {"rest api", "grpc"},
+            {"soap", "rest"},
+            
+            // Architecture conflicts
+            {"microservices", "monolith"},
+            {"serverless", "server-based"},
+            {"event-driven", "request-response"},
+            
+            // Database conflicts
+            {"sql", "nosql"},
+            {"mysql", "postgresql"},
+            {"mongodb", "cassandra"},
+            
+            // Frontend conflicts
+            {"react", "angular"},
+            {"vue", "react"},
+            {"angular", "vue"},
+            
+            // Deployment conflicts
+            {"kubernetes", "docker swarm"},
+            {"aws", "azure"},
+            {"on-premise", "cloud"}
+        };
+
+        // Check current entry for any conflicting patterns
+        List<String> foundPatterns = new ArrayList<>();
+        for (String[] pair : conflictPatterns) {
+            if (lowerContent.contains(pair[0]) && lowerContent.contains(pair[1])) {
+                foundPatterns.add(pair[0] + " vs " + pair[1]);
+            }
+        }
+
+        // Also check against recent entries from OTHER agents on similar topics
+        for (BlackboardEntry other : recentEntries.values()) {
+            if (Objects.equals(other.getId(), entry.getId())) {
+                continue; // Skip self
+            }
+            
+            if (Objects.equals(other.getAgentId(), entry.getAgentId())) {
+                continue; // Same agent is OK - single agent can explore options
+            }
+
+            if (!Objects.equals(other.getEntryType(), entryType)) {
+                continue; // Different entry types
+            }
+
+            String otherContent = other.getContent();
+            if (otherContent == null) {
+                continue;
+            }
+
+            String otherLowerContent = otherContent.toLowerCase();
+            
+            // Check for conflicting patterns between this entry and other entries
+            for (String[] pair : conflictPatterns) {
+                boolean currentHasFirst = lowerContent.contains(pair[0]);
+                boolean currentHasSecond = lowerContent.contains(pair[1]);
+                boolean otherHasFirst = otherLowerContent.contains(pair[0]);
+                boolean otherHasSecond = otherLowerContent.contains(pair[1]);
+                
+                // Conflict: current entry chooses one, other entry chooses the opposite
+                if ((currentHasFirst && !currentHasSecond && otherHasSecond && !otherHasFirst) ||
+                    (currentHasSecond && !currentHasFirst && otherHasFirst && !otherHasSecond)) {
+                    
+                    String conflict = currentHasFirst ? pair[0] + " vs " + pair[1] : pair[1] + " vs " + pair[0];
+                    String evidence = String.format(
+                        "Coordination failure detected: Agent %s chose '%s' in '%s', but agent %s chose '%s' in '%s'. " +
+                        "Multiple agents making conflicting architectural decisions without coordination.",
+                        entry.getAgentId(), 
+                        currentHasFirst ? pair[0] : pair[1],
+                        entry.getTitle(),
+                        other.getAgentId(),
+                        otherHasFirst ? pair[0] : pair[1],
+                        other.getTitle()
+                    );
+                    
+                    MASTViolation violation = new MASTViolation(
+                        entry.getAgentId(),
+                        MASTFailureMode.FM_2_1_COORDINATION_FAILURE,
+                        String.valueOf(entry.getId()),
+                        evidence
+                    );
+
+                    violationRepository.save(violation);
+                    log.warn("Detected FM-2.1 Coordination Failure: {} - conflict on {}",
+                        entry.getAgentId(), conflict);
+                    return; // Only report one conflict per entry
+                }
+            }
+        }
+
+        // Report if single entry contains conflicting patterns (indecisive)
+        if (!foundPatterns.isEmpty()) {
+            String evidence = String.format(
+                "Agent %s entry '%s' contains conflicting decisions: %s. " +
+                "Single entry should not contain mutually exclusive options without clear justification.",
+                entry.getAgentId(), entry.getTitle(), String.join(", ", foundPatterns)
+            );
+            
+            MASTViolation violation = new MASTViolation(
+                entry.getAgentId(),
+                MASTFailureMode.FM_2_1_COORDINATION_FAILURE,
+                String.valueOf(entry.getId()),
+                evidence
+            );
+
+            violationRepository.save(violation);
+            log.warn("Detected FM-2.1 Coordination Failure: {} contains conflicting patterns",
+                entry.getAgentId());
         }
     }
 
