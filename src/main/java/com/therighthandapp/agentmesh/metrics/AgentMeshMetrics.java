@@ -22,16 +22,32 @@ public class AgentMeshMetrics {
     private final MeterRegistry meterRegistry;
     private final MASTValidator mastValidator;
 
-    // Counters
+    // LLM Counters
     private final Counter llmCallsTotal;
     private final Counter llmTokensTotal;
     private final Counter selfCorrectionAttempts;
     private final Counter selfCorrectionSuccesses;
     private final Counter selfCorrectionFailures;
 
+    // Agent Execution Counters
+    private final Counter agentTasksTotal;
+    private final Counter agentTasksSuccess;
+    private final Counter agentTasksFailure;
+    
+    // Blackboard Counters
+    private final Counter blackboardPostsTotal;
+    private final Counter blackboardQueriesTotal;
+    
+    // Memory Counters
+    private final Counter memoryOperationsTotal;
+    private final Counter memoryHybridSearchTotal;
+
     // Timers
     private final Timer selfCorrectionDuration;
     private final Timer llmCallDuration;
+    private final Timer agentExecutionDuration;
+    private final Timer blackboardQueryDuration;
+    private final Timer memorySearchDuration;
 
     // MAST violation counters per failure mode
     private final Map<MASTFailureMode, Counter> mastViolationCounters = new ConcurrentHashMap<>();
@@ -68,6 +84,49 @@ public class AgentMeshMetrics {
 
         this.llmCallDuration = Timer.builder("agentmesh.llm.call.duration")
                 .description("Duration of LLM API calls")
+                .register(meterRegistry);
+
+        // Initialize agent execution metrics
+        this.agentTasksTotal = Counter.builder("agentmesh.agent.tasks.total")
+                .description("Total number of agent tasks executed")
+                .register(meterRegistry);
+
+        this.agentTasksSuccess = Counter.builder("agentmesh.agent.tasks.success")
+                .description("Number of successful agent tasks")
+                .register(meterRegistry);
+
+        this.agentTasksFailure = Counter.builder("agentmesh.agent.tasks.failure")
+                .description("Number of failed agent tasks")
+                .register(meterRegistry);
+
+        this.agentExecutionDuration = Timer.builder("agentmesh.agent.execution.duration")
+                .description("Agent task execution duration")
+                .register(meterRegistry);
+
+        // Initialize blackboard metrics
+        this.blackboardPostsTotal = Counter.builder("agentmesh.blackboard.posts.total")
+                .description("Total number of blackboard posts")
+                .register(meterRegistry);
+
+        this.blackboardQueriesTotal = Counter.builder("agentmesh.blackboard.queries.total")
+                .description("Total number of blackboard queries")
+                .register(meterRegistry);
+
+        this.blackboardQueryDuration = Timer.builder("agentmesh.blackboard.query.duration")
+                .description("Blackboard query duration")
+                .register(meterRegistry);
+
+        // Initialize memory metrics
+        this.memoryOperationsTotal = Counter.builder("agentmesh.memory.operations.total")
+                .description("Total number of memory operations")
+                .register(meterRegistry);
+
+        this.memoryHybridSearchTotal = Counter.builder("agentmesh.memory.hybrid_search.total")
+                .description("Total number of hybrid search operations")
+                .register(meterRegistry);
+
+        this.memorySearchDuration = Timer.builder("agentmesh.memory.search.duration")
+                .description("Memory search duration")
                 .register(meterRegistry);
 
         // Initialize MAST violation counters for each failure mode
@@ -139,5 +198,97 @@ public class AgentMeshMetrics {
                 .description("Health score for agent (0-100)")
                 .register(meterRegistry);
     }
-}
 
+    // ==================== Agent Execution Metrics ====================
+
+    /**
+     * Record agent task start
+     */
+    public void recordAgentTaskStart(String agentType, String tenantId) {
+        agentTasksTotal.increment();
+        Counter.builder("agentmesh.agent.tasks.started")
+                .tag("agent_type", agentType)
+                .tag("tenant_id", tenantId)
+                .register(meterRegistry)
+                .increment();
+    }
+
+    /**
+     * Record successful agent task completion
+     */
+    public void recordAgentTaskSuccess(String agentType, String tenantId, Duration duration) {
+        agentTasksSuccess.increment();
+        Timer.builder("agentmesh.agent.execution.duration")
+                .tag("agent_type", agentType)
+                .tag("tenant_id", tenantId)
+                .tag("status", "success")
+                .register(meterRegistry)
+                .record(duration);
+    }
+
+    /**
+     * Record failed agent task
+     */
+    public void recordAgentTaskFailure(String agentType, String tenantId, String errorType) {
+        agentTasksFailure.increment();
+        Counter.builder("agentmesh.agent.tasks.failed")
+                .tag("agent_type", agentType)
+                .tag("tenant_id", tenantId)
+                .tag("error_type", errorType)
+                .register(meterRegistry)
+                .increment();
+    }
+
+    // ==================== Blackboard Metrics ====================
+
+    /**
+     * Record blackboard post
+     */
+    public void recordBlackboardPost(String tenantId, String postType) {
+        blackboardPostsTotal.increment();
+        Counter.builder("agentmesh.blackboard.posts.by_type")
+                .tag("tenant_id", tenantId)
+                .tag("post_type", postType)
+                .register(meterRegistry)
+                .increment();
+    }
+
+    /**
+     * Record blackboard query
+     */
+    public void recordBlackboardQuery(String tenantId, Duration duration) {
+        blackboardQueriesTotal.increment();
+        Timer.builder("agentmesh.blackboard.query.duration")
+                .tag("tenant_id", tenantId)
+                .register(meterRegistry)
+                .record(duration);
+    }
+
+    // ==================== Memory Metrics ====================
+
+    /**
+     * Record memory operation
+     */
+    public void recordMemoryOperation(String tenantId, String operationType) {
+        memoryOperationsTotal.increment();
+        Counter.builder("agentmesh.memory.operations.by_type")
+                .tag("tenant_id", tenantId)
+                .tag("operation_type", operationType)
+                .register(meterRegistry)
+                .increment();
+    }
+
+    /**
+     * Record hybrid search operation
+     */
+    public void recordHybridSearch(String tenantId, Duration duration, int resultsCount) {
+        memoryHybridSearchTotal.increment();
+        Timer.builder("agentmesh.memory.search.duration")
+                .tag("tenant_id", tenantId)
+                .register(meterRegistry)
+                .record(duration);
+        
+        meterRegistry.summary("agentmesh.memory.search.results", "tenant_id", tenantId)
+                .record(resultsCount);
+    }
+}

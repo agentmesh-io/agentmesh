@@ -6,10 +6,12 @@ import com.therighthandapp.agentmesh.llm.ChatMessage;
 import com.therighthandapp.agentmesh.llm.LLMResponse;
 import com.therighthandapp.agentmesh.memory.MemoryArtifact;
 import com.therighthandapp.agentmesh.memory.WeaviateService;
+import com.therighthandapp.agentmesh.metrics.AgentMeshMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.*;
 
 /**
@@ -23,14 +25,17 @@ public class AgentExecutionService {
     private final BlackboardService blackboard;
     private final WeaviateService weaviateService;
     private final LLMClient llmClient;
+    private final AgentMeshMetrics metrics;
 
     public AgentExecutionService(
             BlackboardService blackboard,
             WeaviateService weaviateService,
-            LLMClient llmClient) {
+            LLMClient llmClient,
+            AgentMeshMetrics metrics) {
         this.blackboard = blackboard;
         this.weaviateService = weaviateService;
         this.llmClient = llmClient;
+        this.metrics = metrics;
     }
 
     /**
@@ -43,6 +48,7 @@ public class AgentExecutionService {
             String userRequest) {
         
         long startTime = System.currentTimeMillis();
+        metrics.recordAgentTaskStart("planner", tenantId);
         
         try {
             // Create planning prompt
@@ -62,6 +68,7 @@ public class AgentExecutionService {
             LLMResponse response = llmClient.chat(messages, params);
             
             if (!response.isSuccess()) {
+                metrics.recordAgentTaskFailure("planner", tenantId, "llm_failure");
                 throw new RuntimeException("LLM failed: " + response.getErrorMessage());
             }
 
@@ -69,6 +76,7 @@ public class AgentExecutionService {
             log.info("Planner generated SRS: {} chars", srsContent.length());
 
             // Store SRS in memory
+            long memoryStart = System.currentTimeMillis();
             MemoryArtifact srsArtifact = new MemoryArtifact();
             srsArtifact.setAgentId("planner-agent");
             srsArtifact.setArtifactType("SRS");
@@ -82,17 +90,23 @@ public class AgentExecutionService {
             ));
 
             String artifactId = weaviateService.store(srsArtifact);
-            log.info("SRS stored in memory: {}", artifactId);
+            long memoryDuration = System.currentTimeMillis() - memoryStart;
+            metrics.recordMemoryOperation(tenantId, "store");
+            log.info("SRS stored in memory: {} ({}ms)", artifactId, memoryDuration);
 
             // Post to blackboard
+            long bbStart = System.currentTimeMillis();
             var blackboardEntry = blackboard.post(
                 "planner-agent",
                 "PLANNING",
                 "Requirements Analysis Complete",
                 "SRS created with " + countComponents(srsContent) + " components. Artifact ID: " + artifactId
             );
+            long bbDuration = System.currentTimeMillis() - bbStart;
+            metrics.recordBlackboardPost(tenantId, "PLANNING");
 
             long duration = System.currentTimeMillis() - startTime;
+            metrics.recordAgentTaskSuccess("planner", tenantId, Duration.ofMillis(duration));
 
             return AgentExecutionResponse.success(
                 "planner",
@@ -107,6 +121,8 @@ public class AgentExecutionService {
             );
 
         } catch (Exception e) {
+            long duration = System.currentTimeMillis() - startTime;
+            metrics.recordAgentTaskFailure("planner", tenantId, e.getClass().getSimpleName());
             log.error("Planner execution failed", e);
             throw new RuntimeException("Planner execution failed: " + e.getMessage(), e);
         }
