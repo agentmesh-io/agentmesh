@@ -7,6 +7,7 @@ import com.therighthandapp.agentmesh.llm.LLMResponse;
 import com.therighthandapp.agentmesh.memory.MemoryArtifact;
 import com.therighthandapp.agentmesh.memory.WeaviateService;
 import com.therighthandapp.agentmesh.metrics.AgentMeshMetrics;
+import com.therighthandapp.agentmesh.util.MDCContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -47,8 +48,14 @@ public class AgentExecutionService {
             String projectId, 
             String userRequest) {
         
+        // Set MDC context for structured logging
+        MDCContext.setTenantId(tenantId);
+        MDCContext.setAgentType("planner");
+        
         long startTime = System.currentTimeMillis();
         metrics.recordAgentTaskStart("planner", tenantId);
+        
+        log.info("Starting Planner agent execution for project: {}", projectId);
         
         try {
             // Create planning prompt
