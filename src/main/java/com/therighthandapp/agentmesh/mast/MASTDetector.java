@@ -25,6 +25,9 @@ public class MASTDetector {
             return size() > 100; // Keep last 100 entries
         }
     };
+    // Track recent actions per agent for step repetition detection
+    private final Map<String, List<String>> agentActionHistory = new HashMap<>();
+    private static final int MAX_HISTORY_SIZE = 10;
 
     public MASTDetector(MASTViolationRepository violationRepository) {
         this.violationRepository = violationRepository;
@@ -51,7 +54,10 @@ public class MASTDetector {
         // FM-1.2: Role Violation Detection
         detectRoleViolation(entry);
 
-        // FM-1.3: Context Loss Detection
+        // FM-1.3: Step Repetition Detection
+        detectStepRepetition(entry);
+
+        // FM-1.4: Context Loss Detection
         detectContextLoss(entry);
 
         // FM-1.1: Ambiguous Language Detection
@@ -243,6 +249,72 @@ public class MASTDetector {
         REVIEWER,     // Creates REVIEW
         TESTER,       // Creates TEST_RESULT
         UNKNOWN
+    }
+
+    /**
+     * FM-1.3: Step Repetition Detection
+     * Detect when agent repeats the same action multiple times (infinite loop)
+     */
+    private void detectStepRepetition(BlackboardEntry entry) {
+        String agentId = entry.getAgentId();
+        if (agentId == null) {
+            return;
+        }
+
+        // Create an action signature: "entryType:title"
+        String action = entry.getEntryType() + ":" + (entry.getTitle() != null ? entry.getTitle() : "");
+        
+        // Get or create action history for this agent
+        List<String> history = agentActionHistory.computeIfAbsent(agentId, k -> new ArrayList<>());
+        
+        // Add current action
+        history.add(action);
+        
+        // Keep only recent history
+        if (history.size() > MAX_HISTORY_SIZE) {
+            history.remove(0); // Remove oldest
+        }
+        
+        // Count consecutive repetitions of current action
+        int consecutiveCount = 0;
+        for (int i = history.size() - 1; i >= 0; i--) {
+            if (history.get(i).equals(action)) {
+                consecutiveCount++;
+            } else {
+                break; // Stop at first different action
+            }
+        }
+        
+        // Also count total occurrences in recent history
+        long totalOccurrences = history.stream()
+                .filter(a -> a.equals(action))
+                .count();
+        
+        // Detect violation if:
+        // - 3+ consecutive identical actions, OR
+        // - Same action appears 4+ times in recent history (even if not consecutive)
+        boolean isConsecutiveLoop = consecutiveCount >= 3;
+        boolean isFrequentRepetition = totalOccurrences >= 4;
+        
+        if (isConsecutiveLoop || isFrequentRepetition) {
+            String evidence = String.format(
+                "Agent %s is repeating action '%s'. " +
+                "Consecutive repetitions: %d, Total in recent history: %d/%d. " +
+                "This indicates a potential infinite loop or stuck state.",
+                agentId, action, consecutiveCount, totalOccurrences, history.size()
+            );
+            
+            MASTViolation violation = new MASTViolation(
+                agentId,
+                MASTFailureMode.FM_1_3_STEP_REPETITION,
+                String.valueOf(entry.getId()),
+                evidence
+            );
+
+            violationRepository.save(violation);
+            log.warn("Detected FM-1.3 Step Repetition: Agent {} repeated '{}' {} times consecutively",
+                agentId, action, consecutiveCount);
+        }
     }
 
 
