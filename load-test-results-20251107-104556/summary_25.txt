@@ -1,0 +1,15 @@
+Load Test Summary: Medium Load
+Concurrency: 25
+Duration: 0s
+Total Requests: 25
+Successful: 0
+Failed: 25
+Success Rate: 0.0%
+Throughput:  req/s
+
+Latency:
+  Min: 89ms
+  Avg: 101ms
+  Max: 112ms
+  P95: 108ms
+  P99: 111ms

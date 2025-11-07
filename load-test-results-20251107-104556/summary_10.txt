@@ -1,0 +1,15 @@
+Load Test Summary: Light Load
+Concurrency: 10
+Duration: 1s
+Total Requests: 10
+Successful: 10
+Failed: 0
+Success Rate: 100.0%
+Throughput: 10.00 req/s
+
+Latency:
+  Min: 376ms
+  Avg: 378ms
+  Max: 382ms
+  P95: 381ms
+  P99: 381ms
