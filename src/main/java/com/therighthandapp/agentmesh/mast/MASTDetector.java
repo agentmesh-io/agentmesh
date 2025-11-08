@@ -60,6 +60,9 @@ public class MASTDetector {
         // FM-2.1: Coordination Failure Detection
         detectCoordinationFailure(entry);
 
+        // FM-2.3: Dependency Violation Detection
+        detectDependencyViolation(entry);
+
         // FM-1.4: Context Loss Detection
         detectContextLoss(entry);
 
@@ -453,6 +456,204 @@ public class MASTDetector {
             log.warn("Detected FM-2.1 Coordination Failure: {} contains conflicting patterns",
                 entry.getAgentId());
         }
+    }
+
+
+    /**
+     * FM-2.3: Dependency Violation Detection
+     * Detects when agents execute tasks in wrong order, violating dependencies.
+     * Expected workflow: Planner → Implementer → Reviewer → Tester
+     * 
+     * Violations include:
+     * - Tester creating TEST_RESULT before Implementer creates CODE
+     * - Reviewer creating REVIEW before Implementer creates CODE
+     * - Implementer creating CODE before Planner creates SRS or TASK_BREAKDOWN
+     * - Any agent working on a task before its dependencies are met
+     */
+    private void detectDependencyViolation(BlackboardEntry entry) {
+        String agentId = entry.getAgentId();
+        String entryType = entry.getEntryType();
+        String tenantId = entry.getTenantId();
+        
+        if (agentId == null || entryType == null) {
+            return;
+        }
+        
+        AgentRole agentRole = inferAgentRole(agentId);
+        
+        // Check for dependency violations based on entry type and agent role
+        switch (entryType) {
+            case "CODE":
+                // Implementer should only create CODE after planning is done
+                if (agentRole == AgentRole.IMPLEMENTER) {
+                    if (!hasPriorEntryForTenant("SRS", tenantId) && !hasPriorEntryForTenant("TASK_BREAKDOWN", tenantId)) {
+                        String evidence = String.format(
+                            "Implementer agent %s created CODE entry '%s' before any planning (SRS or TASK_BREAKDOWN) was done. " +
+                            "Code implementation requires prior specification or task breakdown. " +
+                            "Expected workflow: Planner creates SRS/TASK_BREAKDOWN → Implementer creates CODE.",
+                            agentId, entry.getTitle()
+                        );
+                        
+                        MASTViolation violation = new MASTViolation(
+                            agentId,
+                            MASTFailureMode.FM_2_3_DEPENDENCY_VIOLATION,
+                            String.valueOf(entry.getId()),
+                            evidence
+                        );
+                        
+                        violationRepository.save(violation);
+                        log.warn("Detected FM-2.3 Dependency Violation: {} created CODE before planning", agentId);
+                    }
+                }
+                break;
+                
+            case "REVIEW":
+                // Reviewer should only create REVIEW after CODE exists
+                if (agentRole == AgentRole.REVIEWER) {
+                    if (!hasPriorEntryForTenant("CODE", tenantId)) {
+                        String evidence = String.format(
+                            "Reviewer agent %s created REVIEW entry '%s' before any CODE entries exist. " +
+                            "Code review requires code to review. " +
+                            "Expected workflow: Implementer creates CODE → Reviewer creates REVIEW.",
+                            agentId, entry.getTitle()
+                        );
+                        
+                        MASTViolation violation = new MASTViolation(
+                            agentId,
+                            MASTFailureMode.FM_2_3_DEPENDENCY_VIOLATION,
+                            String.valueOf(entry.getId()),
+                            evidence
+                        );
+                        
+                        violationRepository.save(violation);
+                        log.warn("Detected FM-2.3 Dependency Violation: {} created REVIEW before CODE", agentId);
+                    }
+                }
+                break;
+                
+            case "TEST_RESULT":
+                // Tester should only create TEST_RESULT after CODE exists
+                if (agentRole == AgentRole.TESTER) {
+                    if (!hasPriorEntryForTenant("CODE", tenantId)) {
+                        String evidence = String.format(
+                            "Tester agent %s created TEST_RESULT entry '%s' before any CODE entries exist. " +
+                            "Testing requires code to test. " +
+                            "Expected workflow: Implementer creates CODE → Tester creates TEST_RESULT.",
+                            agentId, entry.getTitle()
+                        );
+                        
+                        MASTViolation violation = new MASTViolation(
+                            agentId,
+                            MASTFailureMode.FM_2_3_DEPENDENCY_VIOLATION,
+                            String.valueOf(entry.getId()),
+                            evidence
+                        );
+                        
+                        violationRepository.save(violation);
+                        log.warn("Detected FM-2.3 Dependency Violation: {} created TEST_RESULT before CODE", agentId);
+                    }
+                }
+                break;
+                
+            case "TASK_BREAKDOWN":
+                // Task breakdown should come after SRS (if SRS exists in workflow)
+                if (agentRole == AgentRole.PLANNER) {
+                    // Check if there's already a TASK_BREAKDOWN from another planner
+                    if (hasPriorEntryFromDifferentAgentForTenant("TASK_BREAKDOWN", agentId, tenantId)) {
+                        String evidence = String.format(
+                            "Planner agent %s created duplicate TASK_BREAKDOWN entry '%s' when another planner already created one. " +
+                            "This may indicate lack of coordination in the planning phase. " +
+                            "Multiple task breakdowns should be consolidated.",
+                            agentId, entry.getTitle()
+                        );
+                        
+                        MASTViolation violation = new MASTViolation(
+                            agentId,
+                            MASTFailureMode.FM_2_3_DEPENDENCY_VIOLATION,
+                            String.valueOf(entry.getId()),
+                            evidence
+                        );
+                        
+                        violationRepository.save(violation);
+                        log.warn("Detected FM-2.3 Dependency Violation: {} created duplicate TASK_BREAKDOWN", agentId);
+                    }
+                }
+                break;
+        }
+        
+        // Additional check: Detect if Reviewer or Tester is working before Planner
+        if ((agentRole == AgentRole.REVIEWER || agentRole == AgentRole.TESTER) && 
+            !hasPriorEntryForTenant("SRS", tenantId) && !hasPriorEntryForTenant("TASK_BREAKDOWN", tenantId)) {
+            
+            String roleName = agentRole.toString().substring(0, 1) + 
+                            agentRole.toString().substring(1).toLowerCase();
+            
+            String evidence = String.format(
+                "Agent %s (role: %s) created entry '%s' before any planning phase (SRS or TASK_BREAKDOWN). " +
+                "%s agents should not start work before planning is complete. " +
+                "Expected workflow: Planner → Implementer → Reviewer → Tester.",
+                agentId, roleName, entry.getTitle(), roleName
+            );
+            
+            MASTViolation violation = new MASTViolation(
+                agentId,
+                MASTFailureMode.FM_2_3_DEPENDENCY_VIOLATION,
+                String.valueOf(entry.getId()),
+                evidence
+            );
+            
+            violationRepository.save(violation);
+            log.warn("Detected FM-2.3 Dependency Violation: {} started before planning phase", agentId);
+        }
+    }
+    
+    /**
+     * Check if there's a prior entry of given type in the workflow for the same tenant
+     */
+    private boolean hasPriorEntry(String entryType) {
+        return hasPriorEntryForTenant(entryType, null);
+    }
+    
+    /**
+     * Check if there's a prior entry of given type for a specific tenant
+     */
+    private boolean hasPriorEntryForTenant(String entryType, String tenantId) {
+        for (BlackboardEntry entry : recentEntries.values()) {
+            // If tenantId is provided, filter by tenant
+            if (tenantId != null && !tenantId.equals(entry.getTenantId())) {
+                continue;
+            }
+            
+            if (entryType.equals(entry.getEntryType())) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    /**
+     * Check if there's a prior entry of given type from a different agent (same tenant)
+     */
+    private boolean hasPriorEntryFromDifferentAgent(String entryType, String currentAgentId) {
+        return hasPriorEntryFromDifferentAgentForTenant(entryType, currentAgentId, null);
+    }
+    
+    /**
+     * Check if there's a prior entry of given type from a different agent for a specific tenant
+     */
+    private boolean hasPriorEntryFromDifferentAgentForTenant(String entryType, String currentAgentId, String tenantId) {
+        for (BlackboardEntry entry : recentEntries.values()) {
+            // If tenantId is provided, filter by tenant
+            if (tenantId != null && !tenantId.equals(entry.getTenantId())) {
+                continue;
+            }
+            
+            if (entryType.equals(entry.getEntryType()) && 
+                !currentAgentId.equals(entry.getAgentId())) {
+                return true;
+            }
+        }
+        return false;
     }
 
 
