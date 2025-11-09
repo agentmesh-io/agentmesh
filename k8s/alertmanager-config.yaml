@@ -1,0 +1,342 @@
+---
+# AlertManager Configuration for AgentMesh
+# Handles routing and notification delivery for Prometheus alerts
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: alertmanager-agentmesh
+  namespace: monitoring
+  labels:
+    app: alertmanager
+type: Opaque
+stringData:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 5m
+      slack_api_url: 'REPLACE_WITH_YOUR_SLACK_WEBHOOK_URL'
+      pagerduty_url: 'https://events.pagerduty.com/v2/enqueue'
+    
+    # Templates for notification formatting
+    templates:
+    - '/etc/alertmanager/template/*.tmpl'
+    
+    # Routing tree for alerts
+    route:
+      receiver: 'default'
+      group_by: ['alertname', 'severity', 'component']
+      group_wait: 10s        # Wait for other alerts before sending
+      group_interval: 10s    # How often to send grouped alerts
+      repeat_interval: 4h    # How often to re-send alerts
+      
+      routes:
+      # Critical alerts - PagerDuty + Slack
+      - match:
+          severity: critical
+        receiver: 'critical-alerts'
+        group_wait: 10s
+        repeat_interval: 5m
+        continue: true  # Continue to other routes
+      
+      # High severity - Slack high priority channel
+      - match:
+          severity: high
+        receiver: 'high-priority'
+        group_wait: 30s
+        repeat_interval: 1h
+      
+      # Warnings - Slack warnings channel
+      - match:
+          severity: warning
+        receiver: 'warnings'
+        group_wait: 1m
+        repeat_interval: 4h
+      
+      # Info - Log only
+      - match:
+          severity: info
+        receiver: 'info-logs'
+        group_wait: 5m
+        repeat_interval: 12h
+      
+      # Component-specific routing
+      - match_re:
+          component: 'database|redis'
+        receiver: 'infrastructure-team'
+        continue: true
+      
+      - match:
+          component: mast
+        receiver: 'quality-team'
+        continue: true
+      
+      - match:
+          component: agents
+        receiver: 'platform-team'
+        continue: true
+    
+    # Inhibition rules - suppress certain alerts when others are firing
+    inhibit_rules:
+    
+    # If AgentMesh pods are down, don't alert on high latency
+    - source_match:
+        alertname: 'AgentMeshPodsDown'
+      target_match:
+        component: 'agents'
+      equal: ['namespace']
+    
+    # If database is down, don't alert on connection pool issues
+    - source_match:
+        alertname: 'PostgreSQLDown'
+      target_match:
+        component: 'database'
+      equal: ['namespace']
+    
+    # If Redis is down, don't alert on cache hit rate
+    - source_match:
+        alertname: 'RedisClusterDown'
+      target_match:
+        component: 'cache'
+      equal: ['namespace']
+    
+    # If critical MAST violations are firing, suppress general violations
+    - source_match:
+        alertname: 'CriticalMASTViolations'
+      target_match:
+        alertname: 'HighMASTViolationRate'
+      equal: ['namespace']
+    
+    # Receivers define how to send notifications
+    receivers:
+    
+    # Default receiver - all alerts
+    - name: 'default'
+      slack_configs:
+      - channel: '#agentmesh-alerts'
+        username: 'AgentMesh Alerting'
+        icon_emoji: ':robot_face:'
+        title: '{{ .GroupLabels.alertname }}'
+        text: |
+          *Alert*: {{ .GroupLabels.alertname }}
+          *Severity*: {{ .GroupLabels.severity }}
+          *Summary*: {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}
+          *Description*: {{ range .Alerts }}{{ .Annotations.description }}{{ end }}
+          {{ if .Alerts.Firing }}*Firing Alerts*: {{ .Alerts.Firing | len }}{{ end }}
+          {{ if .Alerts.Resolved }}*Resolved Alerts*: {{ .Alerts.Resolved | len }}{{ end }}
+        fallback: '{{ .GroupLabels.alertname }}: {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        send_resolved: true
+    
+    # Critical alerts - PagerDuty
+    - name: 'critical-alerts'
+      pagerduty_configs:
+      - service_key: 'REPLACE_WITH_YOUR_PAGERDUTY_SERVICE_KEY'
+        description: '{{ .GroupLabels.alertname }}: {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        severity: 'critical'
+        details:
+          firing: '{{ .Alerts.Firing | len }}'
+          resolved: '{{ .Alerts.Resolved | len }}'
+          summary: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+          description: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+          runbook: '{{ range .Alerts }}{{ .Annotations.runbook }}{{ end }}'
+      
+      # Also send to Slack critical channel
+      slack_configs:
+      - channel: '#agentmesh-critical'
+        username: 'AgentMesh Critical'
+        icon_emoji: ':rotating_light:'
+        color: 'danger'
+        title: '🚨 CRITICAL: {{ .GroupLabels.alertname }}'
+        text: |
+          <!channel> *CRITICAL ALERT*
+          
+          *Alert*: {{ .GroupLabels.alertname }}
+          *Component*: {{ .GroupLabels.component }}
+          *Summary*: {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}
+          *Description*: {{ range .Alerts }}{{ .Annotations.description }}{{ end }}
+          *Runbook*: {{ range .Alerts }}{{ .Annotations.runbook }}{{ end }}
+          
+          *Status*: {{ if .Alerts.Firing }}🔥 FIRING ({{ .Alerts.Firing | len }}){{ end }}{{ if .Alerts.Resolved }}✅ RESOLVED ({{ .Alerts.Resolved | len }}){{ end }}
+        send_resolved: true
+    
+    # High priority alerts
+    - name: 'high-priority'
+      slack_configs:
+      - channel: '#agentmesh-high-priority'
+        username: 'AgentMesh High Priority'
+        icon_emoji: ':warning:'
+        color: 'warning'
+        title: '⚠️ HIGH: {{ .GroupLabels.alertname }}'
+        text: |
+          *Alert*: {{ .GroupLabels.alertname }}
+          *Component*: {{ .GroupLabels.component }}
+          *Summary*: {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}
+          *Description*: {{ range .Alerts }}{{ .Annotations.description }}{{ end }}
+          *Runbook*: {{ range .Alerts }}{{ .Annotations.runbook }}{{ end }}
+        send_resolved: true
+    
+    # Warning alerts
+    - name: 'warnings'
+      slack_configs:
+      - channel: '#agentmesh-warnings'
+        username: 'AgentMesh Warnings'
+        icon_emoji: ':large_yellow_circle:'
+        color: '#FFA500'
+        title: '⚡ WARNING: {{ .GroupLabels.alertname }}'
+        text: |
+          *Alert*: {{ .GroupLabels.alertname }}
+          *Component*: {{ .GroupLabels.component }}
+          *Summary*: {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}
+          *Description*: {{ range .Alerts }}{{ .Annotations.description }}{{ end }}
+        send_resolved: true
+    
+    # Info alerts - minimal logging
+    - name: 'info-logs'
+      slack_configs:
+      - channel: '#agentmesh-info'
+        username: 'AgentMesh Info'
+        icon_emoji: ':information_source:'
+        color: 'good'
+        title: 'ℹ️ INFO: {{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        send_resolved: false
+    
+    # Infrastructure team
+    - name: 'infrastructure-team'
+      slack_configs:
+      - channel: '#infrastructure-alerts'
+        username: 'AgentMesh Infrastructure'
+        icon_emoji: ':construction:'
+        title: '🔧 Infrastructure Alert: {{ .GroupLabels.alertname }}'
+        text: |
+          *Component*: {{ .GroupLabels.component }}
+          *Summary*: {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}
+          *Description*: {{ range .Alerts }}{{ .Annotations.description }}{{ end }}
+        send_resolved: true
+    
+    # Quality team (MAST violations)
+    - name: 'quality-team'
+      slack_configs:
+      - channel: '#quality-alerts'
+        username: 'AgentMesh Quality'
+        icon_emoji: ':microscope:'
+        title: '🔬 Quality Alert: {{ .GroupLabels.alertname }}'
+        text: |
+          *Summary*: {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}
+          *Description*: {{ range .Alerts }}{{ .Annotations.description }}{{ end }}
+        send_resolved: true
+    
+    # Platform team (agents)
+    - name: 'platform-team'
+      slack_configs:
+      - channel: '#platform-alerts'
+        username: 'AgentMesh Platform'
+        icon_emoji: ':gear:'
+        title: '⚙️ Platform Alert: {{ .GroupLabels.alertname }}'
+        text: |
+          *Summary*: {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}
+          *Description*: {{ range .Alerts }}{{ .Annotations.description }}{{ end }}
+        send_resolved: true
+
+---
+# AlertManager Deployment
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager-agentmesh
+  namespace: monitoring
+  labels:
+    app: alertmanager
+spec:
+  type: ClusterIP
+  ports:
+  - name: web
+    port: 9093
+    targetPort: 9093
+    protocol: TCP
+  selector:
+    app: alertmanager
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager-agentmesh
+  namespace: monitoring
+  labels:
+    app: alertmanager
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+    spec:
+      containers:
+      - name: alertmanager
+        image: prom/alertmanager:v0.26.0
+        args:
+        - '--config.file=/etc/alertmanager/alertmanager.yml'
+        - '--storage.path=/alertmanager'
+        - '--cluster.listen-address=:9094'
+        - '--cluster.advertise-address=$(POD_IP):9094'
+        - '--cluster.peer=alertmanager-agentmesh-0.alertmanager-agentmesh:9094'
+        - '--cluster.peer=alertmanager-agentmesh-1.alertmanager-agentmesh:9094'
+        env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        ports:
+        - name: web
+          containerPort: 9093
+          protocol: TCP
+        - name: cluster
+          containerPort: 9094
+          protocol: TCP
+        volumeMounts:
+        - name: config
+          mountPath: /etc/alertmanager
+        - name: storage
+          mountPath: /alertmanager
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        livenessProbe:
+          httpGet:
+            path: /-/healthy
+            port: 9093
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /-/ready
+            port: 9093
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      
+      volumes:
+      - name: config
+        secret:
+          secretName: alertmanager-agentmesh
+      - name: storage
+        emptyDir: {}
+      
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - alertmanager
+              topologyKey: kubernetes.io/hostname

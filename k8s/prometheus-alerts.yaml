@@ -1,0 +1,381 @@
+---
+# Prometheus Alert Rules for AgentMesh
+# Defines alerts for critical conditions, performance degradation, and system health
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: agentmesh-alerts
+  namespace: agentmesh
+  labels:
+    app: agentmesh
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+  
+  # ============================================================================
+  # CRITICAL ALERTS - Require immediate attention
+  # ============================================================================
+  - name: agentmesh.critical
+    interval: 30s
+    rules:
+    
+    # High MAST violation rate
+    - alert: HighMASTViolationRate
+      expr: |
+        sum(rate(agentmesh_mast_violations_total[5m])) * 60 > 10
+      for: 5m
+      labels:
+        severity: critical
+        component: mast
+      annotations:
+        summary: "High MAST violation rate detected"
+        description: "MAST violations are occurring at {{ $value | humanize }} per minute (threshold: 10/min)"
+        runbook: "https://docs.agentmesh.io/runbooks/mast-violations"
+    
+    # Critical MAST violations
+    - alert: CriticalMASTViolations
+      expr: |
+        sum(rate(agentmesh_mast_violations_by_severity{severity="CRITICAL"}[5m])) * 60 > 2
+      for: 2m
+      labels:
+        severity: critical
+        component: mast
+      annotations:
+        summary: "Critical MAST violations detected"
+        description: "Critical violations occurring at {{ $value | humanize }} per minute"
+        runbook: "https://docs.agentmesh.io/runbooks/critical-violations"
+    
+    # AgentMesh pods down
+    - alert: AgentMeshPodsDown
+      expr: |
+        kube_deployment_status_replicas_available{deployment="agentmesh"} < 2
+      for: 2m
+      labels:
+        severity: critical
+        component: deployment
+      annotations:
+        summary: "AgentMesh pods unavailable"
+        description: "Only {{ $value }} pods available (minimum: 2 for HA)"
+        runbook: "https://docs.agentmesh.io/runbooks/pod-failures"
+    
+    # Database connection pool exhaustion
+    - alert: DatabaseConnectionPoolExhausted
+      expr: |
+        hikaricp_connections_pending > 5
+      for: 2m
+      labels:
+        severity: critical
+        component: database
+      annotations:
+        summary: "Database connection pool exhausted"
+        description: "{{ $value }} threads waiting for database connections"
+        runbook: "https://docs.agentmesh.io/runbooks/db-pool-exhaustion"
+    
+    # Agent task failure spike
+    - alert: AgentTaskFailureSpike
+      expr: |
+        (
+          sum(rate(agentmesh_agent_tasks_failure[5m])) 
+          / 
+          sum(rate(agentmesh_agent_tasks_total[5m]))
+        ) > 0.2
+      for: 5m
+      labels:
+        severity: critical
+        component: agents
+      annotations:
+        summary: "High agent task failure rate"
+        description: "{{ $value | humanizePercentage }} of agent tasks are failing"
+        runbook: "https://docs.agentmesh.io/runbooks/agent-failures"
+    
+    # Redis cluster down
+    - alert: RedisClusterDown
+      expr: |
+        up{job="redis-cluster"} == 0
+      for: 1m
+      labels:
+        severity: critical
+        component: redis
+      annotations:
+        summary: "Redis cluster is down"
+        description: "Redis cluster {{ $labels.instance }} is unreachable"
+        runbook: "https://docs.agentmesh.io/runbooks/redis-down"
+    
+    # PostgreSQL down
+    - alert: PostgreSQLDown
+      expr: |
+        up{job="postgres"} == 0
+      for: 1m
+      labels:
+        severity: critical
+        component: database
+      annotations:
+        summary: "PostgreSQL database is down"
+        description: "PostgreSQL instance {{ $labels.instance }} is unreachable"
+        runbook: "https://docs.agentmesh.io/runbooks/postgres-down"
+  
+  # ============================================================================
+  # HIGH SEVERITY ALERTS - Require attention within hours
+  # ============================================================================
+  - name: agentmesh.high
+    interval: 1m
+    rules:
+    
+    # High database query latency
+    - alert: HighDatabaseLatency
+      expr: |
+        histogram_quantile(0.95, 
+          sum(rate(agentmesh_database_query_duration_seconds_bucket[5m])) by (le)
+        ) > 0.5
+      for: 10m
+      labels:
+        severity: high
+        component: database
+      annotations:
+        summary: "High database query latency"
+        description: "P95 query latency is {{ $value | humanizeDuration }} (threshold: 500ms)"
+        runbook: "https://docs.agentmesh.io/runbooks/slow-queries"
+    
+    # Low cache hit rate
+    - alert: LowCacheHitRate
+      expr: |
+        (
+          sum(rate(agentmesh_cache_hits_total[5m])) 
+          / 
+          (sum(rate(agentmesh_cache_hits_total[5m])) + sum(rate(agentmesh_cache_misses_total[5m])))
+        ) < 0.5
+      for: 15m
+      labels:
+        severity: high
+        component: cache
+      annotations:
+        summary: "Low cache hit rate"
+        description: "Cache hit rate is {{ $value | humanizePercentage }} (threshold: 50%)"
+        runbook: "https://docs.agentmesh.io/runbooks/cache-performance"
+    
+    # High LLM call latency
+    - alert: HighLLMLatency
+      expr: |
+        histogram_quantile(0.95, 
+          sum(rate(agentmesh_llm_call_duration_seconds_bucket[5m])) by (le)
+        ) > 10
+      for: 10m
+      labels:
+        severity: high
+        component: llm
+      annotations:
+        summary: "High LLM API latency"
+        description: "P95 LLM call latency is {{ $value | humanizeDuration }} (threshold: 10s)"
+        runbook: "https://docs.agentmesh.io/runbooks/llm-latency"
+    
+    # Memory usage high
+    - alert: HighMemoryUsage
+      expr: |
+        (
+          container_memory_working_set_bytes{pod=~"agentmesh-.*"}
+          /
+          container_spec_memory_limit_bytes{pod=~"agentmesh-.*"}
+        ) > 0.85
+      for: 10m
+      labels:
+        severity: high
+        component: resources
+      annotations:
+        summary: "High memory usage"
+        description: "Pod {{ $labels.pod }} memory usage is {{ $value | humanizePercentage }}"
+        runbook: "https://docs.agentmesh.io/runbooks/memory-pressure"
+    
+    # High CPU usage
+    - alert: HighCPUUsage
+      expr: |
+        rate(container_cpu_usage_seconds_total{pod=~"agentmesh-.*"}[5m]) > 1.8
+      for: 15m
+      labels:
+        severity: high
+        component: resources
+      annotations:
+        summary: "High CPU usage"
+        description: "Pod {{ $labels.pod }} CPU usage is {{ $value | humanize }} cores"
+        runbook: "https://docs.agentmesh.io/runbooks/cpu-pressure"
+    
+    # Connection pool high utilization
+    - alert: HighConnectionPoolUtilization
+      expr: |
+        (
+          hikaricp_connections_active 
+          / 
+          hikaricp_connections_max
+        ) > 0.8
+      for: 10m
+      labels:
+        severity: high
+        component: database
+      annotations:
+        summary: "High connection pool utilization"
+        description: "Connection pool is {{ $value | humanizePercentage }} utilized"
+        runbook: "https://docs.agentmesh.io/runbooks/connection-pool"
+    
+    # Persistent volume usage high
+    - alert: HighPVUsage
+      expr: |
+        (
+          kubelet_volume_stats_used_bytes
+          /
+          kubelet_volume_stats_capacity_bytes
+        ) > 0.85
+      for: 10m
+      labels:
+        severity: high
+        component: storage
+      annotations:
+        summary: "High persistent volume usage"
+        description: "PVC {{ $labels.persistentvolumeclaim }} is {{ $value | humanizePercentage }} full"
+        runbook: "https://docs.agentmesh.io/runbooks/storage-full"
+  
+  # ============================================================================
+  # WARNING ALERTS - Should be investigated
+  # ============================================================================
+  - name: agentmesh.warning
+    interval: 2m
+    rules:
+    
+    # Agent success rate degradation
+    - alert: AgentSuccessRateDegraded
+      expr: |
+        (
+          sum(rate(agentmesh_agent_tasks_success[10m])) 
+          / 
+          sum(rate(agentmesh_agent_tasks_total[10m]))
+        ) < 0.9
+      for: 15m
+      labels:
+        severity: warning
+        component: agents
+      annotations:
+        summary: "Agent success rate degraded"
+        description: "Success rate is {{ $value | humanizePercentage }} (threshold: 90%)"
+    
+    # Self-correction failure rate high
+    - alert: HighSelfCorrectionFailureRate
+      expr: |
+        (
+          sum(rate(agentmesh_selfcorrection_failures_total[10m])) 
+          / 
+          sum(rate(agentmesh_selfcorrection_attempts_total[10m]))
+        ) > 0.3
+      for: 15m
+      labels:
+        severity: warning
+        component: selfcorrection
+      annotations:
+        summary: "High self-correction failure rate"
+        description: "{{ $value | humanizePercentage }} of self-correction attempts failing"
+    
+    # Unresolved violations accumulating
+    - alert: UnresolvedViolationsAccumulating
+      expr: |
+        agentmesh_mast_unresolved_violations > 20
+      for: 30m
+      labels:
+        severity: warning
+        component: mast
+      annotations:
+        summary: "Unresolved MAST violations accumulating"
+        description: "{{ $value }} unresolved violations (threshold: 20)"
+    
+    # Kafka consumer lag
+    - alert: KafkaConsumerLag
+      expr: |
+        kafka_consumergroup_lag > 1000
+      for: 10m
+      labels:
+        severity: warning
+        component: kafka
+      annotations:
+        summary: "Kafka consumer lag detected"
+        description: "Consumer group {{ $labels.consumergroup }} has {{ $value }} messages lag"
+    
+    # Pod restart rate high
+    - alert: HighPodRestartRate
+      expr: |
+        rate(kube_pod_container_status_restarts_total{pod=~"agentmesh-.*"}[15m]) > 0
+      for: 10m
+      labels:
+        severity: warning
+        component: deployment
+      annotations:
+        summary: "Pod restarting frequently"
+        description: "Pod {{ $labels.pod }} restarting at {{ $value }} restarts/sec"
+    
+    # Blackboard entry growth rate high
+    - alert: BlackboardGrowthRateHigh
+      expr: |
+        rate(agentmesh_blackboard_entries[10m]) > 10
+      for: 20m
+      labels:
+        severity: warning
+        component: blackboard
+      annotations:
+        summary: "Blackboard growing rapidly"
+        description: "Blackboard growing at {{ $value }} entries/sec"
+    
+    # Token consumption spike
+    - alert: TokenConsumptionSpike
+      expr: |
+        (
+          rate(agentmesh_llm_tokens_total[5m]) 
+          / 
+          rate(agentmesh_llm_tokens_total[1h] offset 1h)
+        ) > 2
+      for: 10m
+      labels:
+        severity: warning
+        component: llm
+      annotations:
+        summary: "LLM token consumption spiked"
+        description: "Token usage {{ $value }}x higher than average"
+  
+  # ============================================================================
+  # INFO ALERTS - Informational, no immediate action required
+  # ============================================================================
+  - name: agentmesh.info
+    interval: 5m
+    rules:
+    
+    # High active agent count
+    - alert: HighActiveAgentCount
+      expr: |
+        agentmesh_agents_active > 80
+      for: 30m
+      labels:
+        severity: info
+        component: agents
+      annotations:
+        summary: "High number of active agents"
+        description: "{{ $value }} agents currently active (capacity: 100)"
+    
+    # Cache eviction rate high
+    - alert: HighCacheEvictionRate
+      expr: |
+        rate(redis_evicted_keys_total[10m]) > 10
+      for: 20m
+      labels:
+        severity: info
+        component: cache
+      annotations:
+        summary: "High cache eviction rate"
+        description: "Redis evicting {{ $value }} keys/sec"
+    
+    # Database connection churn
+    - alert: HighConnectionChurn
+      expr: |
+        rate(hikaricp_connections_creation_total[10m]) > 1
+      for: 20m
+      labels:
+        severity: info
+        component: database
+      annotations:
+        summary: "High database connection churn"
+        description: "Creating {{ $value }} new connections/sec"
