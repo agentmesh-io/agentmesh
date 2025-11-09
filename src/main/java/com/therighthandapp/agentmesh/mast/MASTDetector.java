@@ -69,6 +69,9 @@ public class MASTDetector {
         // FM-3.3: Format Violation Detection
         detectFormatViolation(entry);
 
+        // FM-3.4: Hallucination Detection
+        detectHallucination(entry);
+
         // FM-1.4: Context Loss Detection
         detectContextLoss(entry);
 
@@ -908,6 +911,305 @@ public class MASTDetector {
         
         violationRepository.save(violation);
         log.warn("Detected FM-3.3 Format Violation: {} in entry {} - {}", 
+            entry.getAgentId(), entry.getTitle(), reason);
+    }
+    
+    /**
+     * FM-3.4: Hallucination Detection
+     * Detects when agents reference non-existent entities:
+     * - Files that don't exist in referenced paths
+     * - Classes, methods, variables not mentioned in prior CODE entries
+     * - API endpoints not defined in prior SRS/CODE
+     * - Dependencies not listed in prior entries
+     * - Features/requirements not in the SRS
+     */
+    private void detectHallucination(BlackboardEntry entry) {
+        String content = entry.getContent();
+        if (content == null || content.isBlank()) {
+            return;
+        }
+        
+        String entryType = entry.getEntryType();
+        String tenantId = entry.getTenantId();
+        
+        // Only check CODE, REVIEW, and TEST_RESULT entries for hallucinations
+        if (!entryType.equals("CODE") && !entryType.equals("REVIEW") && !entryType.equals("TEST_RESULT")) {
+            return;
+        }
+        
+        // Detect references to non-existent files
+        if (detectNonExistentFileReferences(entry, content, tenantId)) {
+            return;
+        }
+        
+        // Detect references to non-existent classes/methods
+        if (detectNonExistentCodeReferences(entry, content, tenantId)) {
+            return;
+        }
+        
+        // Detect references to non-existent API endpoints
+        if (detectNonExistentAPIReferences(entry, content, tenantId)) {
+            return;
+        }
+        
+        // Detect references to non-existent requirements
+        if (detectNonExistentRequirements(entry, content, tenantId)) {
+            return;
+        }
+        
+        // Detect impossible version numbers or dates
+        if (detectImpossibleReferences(entry, content)) {
+            return;
+        }
+    }
+    
+    private boolean detectNonExistentFileReferences(BlackboardEntry entry, String content, String tenantId) {
+        // Look for file path references (e.g., "src/main/java/...")
+        String[] filePatterns = {
+            "src/[a-zA-Z0-9_/.-]+\\.(java|py|js|ts|rb|go|rs|cpp|c|h)",
+            "config/[a-zA-Z0-9_/.-]+\\.(yaml|yml|json|xml|properties)",
+            "tests?/[a-zA-Z0-9_/.-]+\\.(java|py|js|ts)"
+        };
+        
+        for (String pattern : filePatterns) {
+            java.util.regex.Pattern p = java.util.regex.Pattern.compile(pattern);
+            java.util.regex.Matcher m = p.matcher(content);
+            
+            while (m.find()) {
+                String filePath = m.group();
+                
+                // Check if this file was mentioned in prior CODE entries
+                boolean fileExists = false;
+                for (BlackboardEntry priorEntry : recentEntries.values()) {
+                    if (!Objects.equals(tenantId, priorEntry.getTenantId())) {
+                        continue;
+                    }
+                    
+                    if (priorEntry.getEntryType().equals("CODE") && 
+                        priorEntry.getId() < entry.getId() &&
+                        priorEntry.getContent() != null &&
+                        (priorEntry.getContent().contains(filePath) || 
+                         priorEntry.getTitle().contains(filePath))) {
+                        fileExists = true;
+                        break;
+                    }
+                }
+                
+                if (!fileExists) {
+                    createHallucinationViolation(entry, 
+                        "References non-existent file: " + filePath + " (not found in prior CODE entries)");
+                    return true;
+                }
+            }
+        }
+        
+        return false;
+    }
+    
+    private boolean detectNonExistentCodeReferences(BlackboardEntry entry, String content, String tenantId) {
+        // Look for class references (e.g., "class UserService", "new OrderProcessor()")
+        String[] classPatterns = {
+            "class\\s+([A-Z][a-zA-Z0-9_]+)",
+            "interface\\s+([A-Z][a-zA-Z0-9_]+)",
+            "new\\s+([A-Z][a-zA-Z0-9_]+)\\s*\\(",
+            "extends\\s+([A-Z][a-zA-Z0-9_]+)",
+            "implements\\s+([A-Z][a-zA-Z0-9_]+)"
+        };
+        
+        for (String pattern : classPatterns) {
+            java.util.regex.Pattern p = java.util.regex.Pattern.compile(pattern);
+            java.util.regex.Matcher m = p.matcher(content);
+            
+            while (m.find()) {
+                String className = m.group(1);
+                
+                // Skip common/standard library classes
+                if (isStandardLibraryClass(className)) {
+                    continue;
+                }
+                
+                // Check if this class was defined in prior CODE entries
+                boolean classExists = false;
+                for (BlackboardEntry priorEntry : recentEntries.values()) {
+                    if (!Objects.equals(tenantId, priorEntry.getTenantId())) {
+                        continue;
+                    }
+                    
+                    if (priorEntry.getEntryType().equals("CODE") && 
+                        priorEntry.getId() < entry.getId() &&
+                        priorEntry.getContent() != null &&
+                        (priorEntry.getContent().contains("class " + className) ||
+                         priorEntry.getContent().contains("interface " + className) ||
+                         priorEntry.getTitle().contains(className))) {
+                        classExists = true;
+                        break;
+                    }
+                }
+                
+                if (!classExists) {
+                    createHallucinationViolation(entry, 
+                        "References undefined class: " + className + " (not found in prior CODE entries)");
+                    return true;
+                }
+            }
+        }
+        
+        return false;
+    }
+    
+    private boolean detectNonExistentAPIReferences(BlackboardEntry entry, String content, String tenantId) {
+        // Look for API endpoint references (e.g., "/api/users", "GET /orders")
+        String[] apiPatterns = {
+            "(GET|POST|PUT|DELETE|PATCH)\\s+(/[a-zA-Z0-9_/-]+)",
+            "\"(/api/[a-zA-Z0-9_/-]+)\"",
+            "'(/api/[a-zA-Z0-9_/-]+)'"
+        };
+        
+        for (String pattern : apiPatterns) {
+            java.util.regex.Pattern p = java.util.regex.Pattern.compile(pattern);
+            java.util.regex.Matcher m = p.matcher(content);
+            
+            while (m.find()) {
+                String endpoint = m.groupCount() > 1 ? m.group(2) : m.group(1);
+                
+                // Check if this endpoint was defined in prior SRS or CODE entries
+                boolean endpointExists = false;
+                for (BlackboardEntry priorEntry : recentEntries.values()) {
+                    if (!Objects.equals(tenantId, priorEntry.getTenantId())) {
+                        continue;
+                    }
+                    
+                    if ((priorEntry.getEntryType().equals("SRS") || priorEntry.getEntryType().equals("CODE")) && 
+                        priorEntry.getId() < entry.getId() &&
+                        priorEntry.getContent() != null &&
+                        priorEntry.getContent().contains(endpoint)) {
+                        endpointExists = true;
+                        break;
+                    }
+                }
+                
+                if (!endpointExists && endpoint.length() > 4) { // Only check meaningful endpoints
+                    createHallucinationViolation(entry, 
+                        "References undefined API endpoint: " + endpoint + " (not found in prior SRS/CODE)");
+                    return true;
+                }
+            }
+        }
+        
+        return false;
+    }
+    
+    private boolean detectNonExistentRequirements(BlackboardEntry entry, String content, String tenantId) {
+        // Look for requirement references (e.g., "REQ-123", "requirement 5.2")
+        String[] reqPatterns = {
+            "REQ-\\d+",
+            "requirement\\s+\\d+\\.\\d+",
+            "feature\\s+[A-Z]+-\\d+"
+        };
+        
+        for (String pattern : reqPatterns) {
+            java.util.regex.Pattern p = java.util.regex.Pattern.compile(pattern, java.util.regex.Pattern.CASE_INSENSITIVE);
+            java.util.regex.Matcher m = p.matcher(content);
+            
+            while (m.find()) {
+                String reqId = m.group();
+                
+                // Check if this requirement was defined in prior SRS entries
+                boolean reqExists = false;
+                for (BlackboardEntry priorEntry : recentEntries.values()) {
+                    if (!Objects.equals(tenantId, priorEntry.getTenantId())) {
+                        continue;
+                    }
+                    
+                    if (priorEntry.getEntryType().equals("SRS") && 
+                        priorEntry.getId() < entry.getId() &&
+                        priorEntry.getContent() != null &&
+                        priorEntry.getContent().toLowerCase().contains(reqId.toLowerCase())) {
+                        reqExists = true;
+                        break;
+                    }
+                }
+                
+                if (!reqExists) {
+                    createHallucinationViolation(entry, 
+                        "References undefined requirement: " + reqId + " (not found in prior SRS)");
+                    return true;
+                }
+            }
+        }
+        
+        return false;
+    }
+    
+    private boolean detectImpossibleReferences(BlackboardEntry entry, String content) {
+        // Detect future dates (years > current year)
+        int currentYear = java.time.Year.now().getValue();
+        String yearPattern = "\\b(20\\d{2})\\b";
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile(yearPattern);
+        java.util.regex.Matcher m = p.matcher(content);
+        
+        while (m.find()) {
+            int year = Integer.parseInt(m.group(1));
+            if (year > currentYear + 1) { // Allow next year for planning
+                createHallucinationViolation(entry, 
+                    "References future/impossible year: " + year + " (current year is " + currentYear + ")");
+                return true;
+            }
+        }
+        
+        // Detect nonsensical numeric values
+        if (content.matches(".*\\b\\d{10,}\\b.*")) { // 10+ digit numbers (likely nonsense)
+            createHallucinationViolation(entry, 
+                "Contains suspiciously large numeric values (possible hallucination)");
+            return true;
+        }
+        
+        return false;
+    }
+    
+    private boolean isStandardLibraryClass(String className) {
+        // Common standard library classes to skip
+        String[] standardClasses = {
+            "String", "Integer", "Long", "Double", "Float", "Boolean", "Character",
+            "List", "ArrayList", "HashMap", "HashSet", "Map", "Set",
+            "Optional", "Stream", "Collectors",
+            "Object", "Class", "Exception", "RuntimeException",
+            "Thread", "Runnable", "Callable",
+            "Date", "Calendar", "LocalDate", "LocalDateTime", "Instant",
+            "File", "Path", "Files",
+            "Logger", "System", "Math", "Random"
+        };
+        
+        for (String stdClass : standardClasses) {
+            if (className.equals(stdClass)) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    private void createHallucinationViolation(BlackboardEntry entry, String reason) {
+        String evidence = String.format(
+            "Agent %s produced hallucinated content in entry '%s' of type %s. Issue: %s. " +
+            "Content preview: %.200s%s",
+            entry.getAgentId(),
+            entry.getTitle(),
+            entry.getEntryType(),
+            reason,
+            entry.getContent(),
+            entry.getContent().length() > 200 ? "..." : ""
+        );
+        
+        MASTViolation violation = new MASTViolation(
+            entry.getAgentId(),
+            MASTFailureMode.FM_3_4_HALLUCINATION,
+            String.valueOf(entry.getId()),
+            evidence
+        );
+        
+        violationRepository.save(violation);
+        log.warn("Detected FM-3.4 Hallucination: {} in entry {} - {}", 
             entry.getAgentId(), entry.getTitle(), reason);
     }
     
