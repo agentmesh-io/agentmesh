@@ -118,6 +118,21 @@ services:
       interval: 10s
       timeout: 10s
       retries: 5
+
+  # Redis for caching
+  redis:
+    image: redis:7-alpine
+    container_name: agentmesh-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
       start_period: 30s
 
   # AgentMesh Application
@@ -148,6 +163,12 @@ services:
       # Kafka Configuration
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
 
+      # Redis Configuration
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_CACHE_TYPE: redis
+      SPRING_CACHE_REDIS_TIME_TO_LIVE: 3600000
+
       # Multi-tenancy
       AGENTMESH_MULTITENANCY_ENABLED: 'true'
 
@@ -174,6 +195,8 @@ services:
       weaviate:
         condition: service_healthy
       kafka:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       temporal:
         condition: service_healthy
@@ -240,6 +263,7 @@ volumes:
   zookeeper_data:
   zookeeper_logs:
   kafka_data:
+  redis_data:
   prometheus_data:
   grafana_data:
 

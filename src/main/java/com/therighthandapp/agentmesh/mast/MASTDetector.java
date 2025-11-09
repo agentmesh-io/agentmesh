@@ -17,7 +17,7 @@ import java.util.*;
 @Slf4j
 public class MASTDetector {
 
-    private final MASTViolationRepository violationRepository;
+    private final MASTViolationService violationService;
     private final Map<String, Instant> lastMemoryQuery = new HashMap<>();
     private final Map<String, BlackboardEntry> recentEntries = new LinkedHashMap<>() {
         @Override
@@ -29,8 +29,8 @@ public class MASTDetector {
     private final Map<String, List<String>> agentActionHistory = new HashMap<>();
     private static final int MAX_HISTORY_SIZE = 10;
 
-    public MASTDetector(MASTViolationRepository violationRepository) {
-        this.violationRepository = violationRepository;
+    public MASTDetector(MASTViolationService violationService) {
+        this.violationService = violationService;
     }
 
     /**
@@ -131,7 +131,7 @@ public class MASTDetector {
                 evidence
             );
 
-            violationRepository.save(violation);
+            violationService.save(violation);
             log.warn("Detected FM-1.4 Context Loss: Agent {} posted without memory query", agentId);
         }
     }
@@ -236,7 +236,7 @@ public class MASTDetector {
                 evidence
             );
 
-            violationRepository.save(violation);
+            violationService.save(violation);
             log.warn("Detected FM-1.2 Role Violation: {} - {}", agentId, violationReason);
         }
     }
@@ -334,7 +334,7 @@ public class MASTDetector {
                 evidence
             );
 
-            violationRepository.save(violation);
+            violationService.save(violation);
             log.warn("Detected FM-1.3 Step Repetition: Agent {} repeated '{}' {} times consecutively",
                 agentId, action, consecutiveCount);
         }
@@ -446,7 +446,7 @@ public class MASTDetector {
                         evidence
                     );
 
-                    violationRepository.save(violation);
+                    violationService.save(violation);
                     log.warn("Detected FM-2.1 Coordination Failure: {} - conflict on {}",
                         entry.getAgentId(), conflict);
                     return; // Only report one conflict per entry
@@ -469,7 +469,7 @@ public class MASTDetector {
                 evidence
             );
 
-            violationRepository.save(violation);
+            violationService.save(violation);
             log.warn("Detected FM-2.1 Coordination Failure: {} contains conflicting patterns",
                 entry.getAgentId());
         }
@@ -518,7 +518,7 @@ public class MASTDetector {
                             evidence
                         );
                         
-                        violationRepository.save(violation);
+                        violationService.save(violation);
                         log.warn("Detected FM-2.3 Dependency Violation: {} created CODE before planning", agentId);
                     }
                 }
@@ -542,7 +542,7 @@ public class MASTDetector {
                             evidence
                         );
                         
-                        violationRepository.save(violation);
+                        violationService.save(violation);
                         log.warn("Detected FM-2.3 Dependency Violation: {} created REVIEW before CODE", agentId);
                     }
                 }
@@ -566,7 +566,7 @@ public class MASTDetector {
                             evidence
                         );
                         
-                        violationRepository.save(violation);
+                        violationService.save(violation);
                         log.warn("Detected FM-2.3 Dependency Violation: {} created TEST_RESULT before CODE", agentId);
                     }
                 }
@@ -591,7 +591,7 @@ public class MASTDetector {
                             evidence
                         );
                         
-                        violationRepository.save(violation);
+                        violationService.save(violation);
                         log.warn("Detected FM-2.3 Dependency Violation: {} created duplicate TASK_BREAKDOWN", agentId);
                     }
                 }
@@ -619,7 +619,7 @@ public class MASTDetector {
                 evidence
             );
             
-            violationRepository.save(violation);
+            violationService.save(violation);
             log.warn("Detected FM-2.3 Dependency Violation: {} started before planning phase", agentId);
         }
     }
@@ -752,7 +752,7 @@ public class MASTDetector {
                         evidence
                     );
                     
-                    violationRepository.save(violation);
+                    violationService.save(violation);
                     log.warn("Detected FM-2.4 State Inconsistency: {} has different view than {} - '{}' vs '{}'",
                         entry.getAgentId(), other.getAgentId(), currentChoice, otherChoice);
                     return; // Only report one inconsistency per entry
@@ -917,7 +917,7 @@ public class MASTDetector {
             evidence
         );
         
-        violationRepository.save(violation);
+        violationService.save(violation);
         log.warn("Detected FM-3.3 Format Violation: {} in entry {} - {}", 
             entry.getAgentId(), entry.getTitle(), reason);
     }
@@ -1216,7 +1216,7 @@ public class MASTDetector {
             evidence
         );
         
-        violationRepository.save(violation);
+        violationService.save(violation);
         log.warn("Detected FM-3.4 Hallucination: {} in entry {} - {}", 
             entry.getAgentId(), entry.getTitle(), reason);
     }
@@ -1362,7 +1362,7 @@ public class MASTDetector {
             evidence
         );
         
-        violationRepository.save(violation);
+        violationService.save(violation);
         log.warn("Detected FM-3.5 Timeout: {} in entry {} - {}", 
             entry.getAgentId(), entry.getTitle(), reason);
     }
@@ -1573,7 +1573,7 @@ public class MASTDetector {
             evidence
         );
         
-        violationRepository.save(violation);
+        violationService.save(violation);
         log.warn("Detected FM-3.6 Tool Execution Failure: {} in entry {} - {}", 
             entry.getAgentId(), entry.getTitle(), reason);
     }
@@ -1673,7 +1673,7 @@ public class MASTDetector {
                 evidence
             );
 
-            violationRepository.save(violation);
+            violationService.save(violation);
             log.warn("Detected FM-1.1 Ambiguous Language: Entry {} contains: {}", 
                 entry.getTitle(), foundPatterns);
         }
@@ -1706,7 +1706,7 @@ public class MASTDetector {
                 evidence
             );
 
-            violationRepository.save(violation);
+            violationService.save(violation);
             log.warn("Detected FM-3.1 Low Test Coverage: {} has {}% coverage", 
                 entry.getTitle(), coverage);
         }
@@ -1754,7 +1754,7 @@ public class MASTDetector {
                     evidence
                 );
 
-                violationRepository.save(violation);
+                violationService.save(violation);
                 log.warn("Detected FM-2.2 Duplicate Work: '{}' similar to '{}'", 
                     entry.getTitle(), other.getTitle());
                 break; // Only report one duplicate
@@ -1787,7 +1787,7 @@ public class MASTDetector {
             evidence
         );
 
-        violationRepository.save(violation);
+        violationService.save(violation);
         log.info("Detected FM-3.2 Unresolved Review: Monitoring '{}'", review.getTitle());
     }
 

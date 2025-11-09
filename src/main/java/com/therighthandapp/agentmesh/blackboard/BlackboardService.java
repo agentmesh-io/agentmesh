@@ -7,6 +7,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,6 +49,7 @@ public class BlackboardService {
      * Multi-tenant: Automatically scoped to current tenant/project from TenantContext
      */
     @Transactional
+    @CacheEvict(value = {"blackboardEntries", "recentEntries"}, allEntries = true)
     public BlackboardEntry post(String agentId, String entryType, String title, String content) {
         BlackboardEntry entry = new BlackboardEntry(agentId, entryType, title, content);
 
@@ -84,6 +87,7 @@ public class BlackboardService {
      * Multi-tenant: Only returns entries within current tenant/project
      */
     @Transactional(readOnly = true)
+    @Cacheable(value = "blackboardEntries", key = "#entryType + '-' + T(com.therighthandapp.agentmesh.security.TenantContext).getOrNull()?.getTenantId() + '-' + T(com.therighthandapp.agentmesh.security.TenantContext).getOrNull()?.getProjectId()")
     public List<BlackboardEntry> readByType(String entryType) {
         if (multitenancyEnabled) {
             TenantContext context = TenantContext.getOrNull();
@@ -104,6 +108,7 @@ public class BlackboardService {
      * Multi-tenant: Only returns entries within current tenant/project
      */
     @Transactional(readOnly = true)
+    @Cacheable(value = "recentEntries", key = "T(com.therighthandapp.agentmesh.security.TenantContext).getOrNull()?.getTenantId() + '-' + T(com.therighthandapp.agentmesh.security.TenantContext).getOrNull()?.getProjectId()")
     public List<BlackboardEntry> readAll() {
         if (multitenancyEnabled) {
             TenantContext context = TenantContext.getOrNull();
