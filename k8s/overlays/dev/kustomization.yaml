@@ -1,0 +1,113 @@
+---
+# Development Environment Configuration
+# Local development and testing
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: agentmesh-dev
+
+# Reference base configuration
+resources:
+- ../../base
+
+# Development-specific labels
+commonLabels:
+  environment: development
+  tier: dev
+
+# ConfigMap overrides for development
+configMapGenerator:
+- name: agentmesh-config
+  behavior: merge
+  literals:
+  - SPRING_PROFILES_ACTIVE=dev
+  - LOGGING_LEVEL_ROOT=DEBUG
+  - LOGGING_LEVEL_COM_THERIGHTHANDAPP=DEBUG
+  - CACHE_TTL_VIOLATION=300       # 5 minutes for faster testing
+  - CACHE_TTL_BLACKBOARD=300      # 5 minutes
+  - MAST_ASYNC_ENABLED=false      # Synchronous for easier debugging
+  - SELFCORRECTION_MAX_ATTEMPTS=2 # Fewer attempts in dev
+  - DATABASE_POOL_SIZE=10         # Smaller pool
+  - REDIS_MAX_CONNECTIONS=20      # Smaller pool
+  - LLM_MAX_CONCURRENT=3          # Lower concurrency
+  - LLM_TIMEOUT_SECONDS=30        # Shorter timeout
+  - METRICS_EXPORT_INTERVAL=10s   # More frequent metrics
+
+# Development secrets (non-production values)
+secretGenerator:
+- name: agentmesh-secrets
+  behavior: replace
+  literals:
+  - DATABASE_PASSWORD=dev_password_123
+  - REDIS_PASSWORD=dev_redis_123
+  - LLM_API_KEY=sk-dev-placeholder
+  - WEAVIATE_API_KEY=dev-weaviate-key
+
+- name: postgres-secrets
+  behavior: replace
+  literals:
+  - POSTGRES_PASSWORD=dev_password_123
+  - POSTGRES_USER=agentmesh_dev
+  - POSTGRES_DB=agentmesh_dev
+
+# Resource adjustments for development
+replicas:
+- name: agentmesh
+  count: 1  # Single replica for dev
+
+- name: postgres
+  count: 1
+
+- name: redis-cluster
+  count: 3  # Minimal cluster
+
+- name: kafka
+  count: 1
+
+# Patch resources to lower values for dev and disable HPA
+patches:
+- patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/requests/memory
+      value: 512Mi
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/requests/cpu
+      value: 250m
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/limits/memory
+      value: 1Gi
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/limits/cpu
+      value: 500m
+  target:
+    kind: Deployment
+    name: agentmesh
+
+- patch: |-
+    $patch: delete
+  target:
+    kind: HorizontalPodAutoscaler
+    name: agentmesh-hpa
+
+- patch: |-
+    - op: replace
+      path: /spec/type
+      value: NodePort
+    - op: add
+      path: /spec/ports/0/nodePort
+      value: 30080
+  target:
+    kind: Service
+    name: agentmesh-service
+
+# Development-specific annotations
+commonAnnotations:
+  agentmesh.io/environment: development
+  agentmesh.io/debug: "true"
+
+# Use latest tag for development
+images:
+- name: agentmesh
+  newName: agentmesh/agentmesh
+  newTag: dev-latest

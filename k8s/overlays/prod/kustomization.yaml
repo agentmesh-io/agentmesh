@@ -1,0 +1,154 @@
+---
+# Production Environment Configuration
+# Production deployment with full resources and HA
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: agentmesh-prod
+
+# Reference base configuration
+resources:
+- ../../base
+- ingress-production.yaml
+- network-policy.yaml
+
+# Production-specific labels
+commonLabels:
+  environment: production
+  tier: prod
+
+# ConfigMap overrides for production
+configMapGenerator:
+- name: agentmesh-config
+  behavior: merge
+  literals:
+  - SPRING_PROFILES_ACTIVE=prod
+  - LOGGING_LEVEL_ROOT=WARN
+  - LOGGING_LEVEL_COM_THERIGHTHANDAPP=INFO
+  - CACHE_TTL_VIOLATION=7200      # 2 hours
+  - CACHE_TTL_BLACKBOARD=1800     # 30 minutes
+  - MAST_ASYNC_ENABLED=true       # Async detection
+  - SELFCORRECTION_ENABLED=true   # Enable self-correction
+  - SELFCORRECTION_MAX_ATTEMPTS=3
+  - DATABASE_POOL_SIZE=30         # Large pool
+  - REDIS_MAX_CONNECTIONS=100     # Large pool
+  - LLM_MAX_CONCURRENT=20         # High concurrency
+  - LLM_TIMEOUT_SECONDS=60
+  - METRICS_EXPORT_INTERVAL=30s
+  - GRACEFUL_SHUTDOWN_TIMEOUT=30s # Graceful shutdown
+
+# Production secrets (use Sealed Secrets or external secret management)
+# DO NOT commit actual production secrets to git
+secretGenerator:
+- name: agentmesh-secrets
+  behavior: replace
+  envs:
+  - secrets.env  # Load from external file (gitignored)
+
+- name: postgres-secrets
+  behavior: replace
+  envs:
+  - postgres-secrets.env  # Load from external file (gitignored)
+
+# Resource configuration for production (full resources)
+replicas:
+- name: agentmesh
+  count: 5  # HA with load distribution
+
+- name: postgres
+  count: 1  # Use managed PostgreSQL in cloud (RDS, Cloud SQL, etc.)
+
+- name: redis-cluster
+  count: 6  # Full cluster (3 masters + 3 replicas)
+
+- name: kafka
+  count: 3  # Full cluster
+
+# Production resource limits (full capacity)
+patches:
+- patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/requests/memory
+      value: 2Gi
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/requests/cpu
+      value: 1000m
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/limits/memory
+      value: 4Gi
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/limits/cpu
+      value: 2000m
+  target:
+    kind: Deployment
+    name: agentmesh
+
+# Production HPA settings (aggressive scaling)
+- patch: |-
+    - op: replace
+      path: /spec/minReplicas
+      value: 3
+    - op: replace
+      path: /spec/maxReplicas
+      value: 10
+    - op: replace
+      path: /spec/metrics/0/resource/target/averageUtilization
+      value: 60
+  target:
+    kind: HorizontalPodAutoscaler
+    name: agentmesh-hpa
+
+# Production pod disruption budget
+- patch: |-
+    apiVersion: policy/v1
+    kind: PodDisruptionBudget
+    metadata:
+      name: agentmesh-pdb
+      namespace: agentmesh-prod
+    spec:
+      minAvailable: 2
+      selector:
+        matchLabels:
+          app: agentmesh
+
+# Add affinity rules for production
+- patch: |-
+    - op: add
+      path: /spec/template/spec/affinity
+      value:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - agentmesh
+            topologyKey: kubernetes.io/hostname
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+              - key: node-role.kubernetes.io/worker
+                operator: In
+                values:
+                - "true"
+  target:
+    kind: Deployment
+    name: agentmesh
+
+# Production-specific annotations
+commonAnnotations:
+  agentmesh.io/environment: production
+  agentmesh.io/backup-enabled: "true"
+  agentmesh.io/backup-schedule: "0 2 * * *"  # Daily at 2 AM
+  agentmesh.io/monitoring-level: production
+  agentmesh.io/sla: "99.9"
+
+# Use specific versioned tags in production (never 'latest')
+images:
+- name: agentmesh
+  newName: agentmesh/agentmesh
+  newTag: v1.0.0  # Specific version tag

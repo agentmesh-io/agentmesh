@@ -1,0 +1,69 @@
+---
+# Kustomize Base Configuration
+# Shared resources across all environments
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: agentmesh
+
+# Common labels applied to all resources
+commonLabels:
+  app.kubernetes.io/name: agentmesh
+  app.kubernetes.io/part-of: agentmesh-platform
+  app.kubernetes.io/managed-by: kustomize
+
+# Resources included in base
+resources:
+- ../agentmesh-deployment.yaml
+- ../agentmesh-service.yaml
+- ../agentmesh-hpa.yaml
+- ../postgres-statefulset.yaml
+- ../postgres-service.yaml
+- ../redis-cluster-statefulset.yaml
+- ../redis-service.yaml
+- ../kafka-statefulset.yaml
+- ../kafka-service.yaml
+- ../zookeeper-statefulset.yaml
+- ../zookeeper-service.yaml
+- ../prometheus-servicemonitor.yaml
+- ../prometheus-alerts.yaml
+
+# ConfigMaps
+configMapGenerator:
+- name: agentmesh-config
+  literals:
+  - APP_NAME=AgentMesh
+  - SPRING_PROFILES_ACTIVE=default
+  - LOGGING_LEVEL_ROOT=INFO
+  - CACHE_ENABLED=true
+  - MAST_ENABLED=true
+  - SELFCORRECTION_ENABLED=true
+  - METRICS_EXPORT_PROMETHEUS_ENABLED=true
+
+# Secrets (placeholders - override in overlays)
+secretGenerator:
+- name: agentmesh-secrets
+  literals:
+  - DATABASE_PASSWORD=changeme
+  - REDIS_PASSWORD=changeme
+  - LLM_API_KEY=changeme
+  - WEAVIATE_API_KEY=changeme
+
+- name: postgres-secrets
+  literals:
+  - POSTGRES_PASSWORD=changeme
+  - POSTGRES_USER=agentmesh
+  - POSTGRES_DB=agentmesh
+
+# Common resource limits and requests
+commonAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/actuator/prometheus"
+
+# Image transformations (tag can be overridden)
+images:
+- name: agentmesh
+  newName: agentmesh/agentmesh
+  newTag: latest
