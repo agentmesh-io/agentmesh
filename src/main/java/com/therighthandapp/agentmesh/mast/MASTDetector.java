@@ -63,6 +63,9 @@ public class MASTDetector {
         // FM-2.3: Dependency Violation Detection
         detectDependencyViolation(entry);
 
+        // FM-2.4: State Inconsistency Detection
+        detectStateInconsistency(entry);
+
         // FM-1.4: Context Loss Detection
         detectContextLoss(entry);
 
@@ -604,6 +607,143 @@ public class MASTDetector {
             
             violationRepository.save(violation);
             log.warn("Detected FM-2.3 Dependency Violation: {} started before planning phase", agentId);
+        }
+    }
+    
+    /**
+     * FM-2.4: State Inconsistency Detection
+     * Detects when different agents have conflicting views of the project state.
+     * This can happen when:
+     * - Multiple agents reference different versions of the same specification
+     * - Agents work on conflicting assumptions about project structure
+     * - Critical state changes are not propagated to all agents
+     * 
+     * Detection approach:
+     * - Track key state indicators (tech stack, architecture decisions, API contracts)
+     * - Compare mentions of same entities across different agents
+     * - Flag when agents describe same concept differently
+     */
+    private void detectStateInconsistency(BlackboardEntry entry) {
+        String content = entry.getContent();
+        String tenantId = entry.getTenantId();
+        String agentId = entry.getAgentId();
+        
+        if (content == null || tenantId == null) {
+            return;
+        }
+        
+        String lowerContent = content.toLowerCase();
+        
+        // Key state indicators to track
+        String[][] stateIndicators = {
+            // Technology stack conflicts
+            {"java 11", "java 17", "java 21"},
+            {"spring boot 2", "spring boot 3"},
+            {"rest api", "graphql api", "grpc api"},
+            
+            // Architecture patterns
+            {"microservices", "monolith", "serverless"},
+            {"sql database", "nosql database"},
+            {"synchronous", "asynchronous", "event-driven"},
+            
+            // Deployment targets
+            {"kubernetes", "docker swarm", "ecs"},
+            {"aws", "azure", "gcp"},
+            
+            // Framework versions
+            {"react 17", "react 18", "react 19"},
+            {"angular 15", "angular 16", "angular 17"},
+            
+            // API contracts
+            {"version 1", "version 2", "version 3"},
+            {"api v1", "api v2", "api v3"}
+        };
+        
+        // Check current entry for state indicators
+        List<String> currentIndicators = new ArrayList<>();
+        for (String[] indicatorGroup : stateIndicators) {
+            for (String indicator : indicatorGroup) {
+                if (lowerContent.contains(indicator)) {
+                    currentIndicators.add(indicator);
+                }
+            }
+        }
+        
+        if (currentIndicators.isEmpty()) {
+            return; // No state indicators in this entry
+        }
+        
+        // Compare with recent entries from OTHER agents in SAME tenant
+        for (BlackboardEntry other : recentEntries.values()) {
+            // Skip same entry
+            if (Objects.equals(other.getId(), entry.getId())) {
+                continue;
+            }
+            
+            // Only compare entries from same tenant
+            if (!Objects.equals(tenantId, other.getTenantId())) {
+                continue;
+            }
+            
+            // Skip entries from same agent (agent can explore multiple options)
+            if (Objects.equals(agentId, other.getAgentId())) {
+                continue;
+            }
+            
+            String otherContent = other.getContent();
+            if (otherContent == null) {
+                continue;
+            }
+            
+            String otherLowerContent = otherContent.toLowerCase();
+            
+            // Check for conflicting state indicators
+            for (String[] indicatorGroup : stateIndicators) {
+                String currentChoice = null;
+                String otherChoice = null;
+                
+                // Find what current entry chose from this group
+                for (String indicator : indicatorGroup) {
+                    if (lowerContent.contains(indicator)) {
+                        currentChoice = indicator;
+                        break;
+                    }
+                }
+                
+                // Find what other entry chose from this group
+                for (String indicator : indicatorGroup) {
+                    if (otherLowerContent.contains(indicator)) {
+                        otherChoice = indicator;
+                        break;
+                    }
+                }
+                
+                // If both chose from same group but made different choices, it's a conflict
+                if (currentChoice != null && otherChoice != null && 
+                    !currentChoice.equals(otherChoice)) {
+                    
+                    String evidence = String.format(
+                        "State inconsistency detected: Agent %s mentions '%s' in '%s', " +
+                        "but agent %s previously mentioned '%s' in '%s'. " +
+                        "Multiple agents have conflicting views of the same state. " +
+                        "This may lead to incompatible implementations.",
+                        entry.getAgentId(), currentChoice, entry.getTitle(),
+                        other.getAgentId(), otherChoice, other.getTitle()
+                    );
+                    
+                    MASTViolation violation = new MASTViolation(
+                        entry.getAgentId(),
+                        MASTFailureMode.FM_2_4_STATE_INCONSISTENCY,
+                        String.valueOf(entry.getId()),
+                        evidence
+                    );
+                    
+                    violationRepository.save(violation);
+                    log.warn("Detected FM-2.4 State Inconsistency: {} has different view than {} - '{}' vs '{}'",
+                        entry.getAgentId(), other.getAgentId(), currentChoice, otherChoice);
+                    return; // Only report one inconsistency per entry
+                }
+            }
         }
     }
     
