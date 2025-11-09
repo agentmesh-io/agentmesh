@@ -1,0 +1,40 @@
+---
+# ConfigMap for Grafana Dashboard Provisioning
+# Automatically imports AgentMesh dashboards on startup
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-agentmesh
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  agentmesh-overview.json: |-
+{{ .Files.Get "dashboard-overview.json" | indent 4 }}
+
+  agentmesh-performance.json: |-
+{{ .Files.Get "dashboard-performance.json" | indent 4 }}
+
+  agentmesh-mast.json: |-
+{{ .Files.Get "dashboard-mast.json" | indent 4 }}
+
+---
+# Grafana Dashboard Provisioning Config
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-provider
+  namespace: monitoring
+data:
+  dashboards.yaml: |-
+    apiVersion: 1
+    providers:
+    - name: 'AgentMesh'
+      orgId: 1
+      folder: 'AgentMesh'
+      type: file
+      disableDeletion: false
+      updateIntervalSeconds: 30
+      allowUiUpdates: true
+      options:
+        path: /var/lib/grafana/dashboards/agentmesh
