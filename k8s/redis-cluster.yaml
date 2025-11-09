@@ -1,0 +1,374 @@
+---
+# Redis Cluster with Sentinel for High Availability
+# 3 Redis master-replica pairs + 3 Sentinel instances
+
+# Redis ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-cluster-config
+  namespace: agentmesh
+data:
+  redis.conf: |
+    # Network
+    bind 0.0.0.0
+    port 6379
+    protected-mode no
+    tcp-backlog 511
+    timeout 0
+    tcp-keepalive 300
+    
+    # Cluster
+    cluster-enabled yes
+    cluster-config-file nodes.conf
+    cluster-node-timeout 5000
+    cluster-require-full-coverage no
+    
+    # General
+    daemonize no
+    supervised no
+    loglevel notice
+    
+    # Persistence - RDB
+    save 900 1
+    save 300 10
+    save 60 10000
+    stop-writes-on-bgsave-error yes
+    rdbcompression yes
+    rdbchecksum yes
+    dbfilename dump.rdb
+    dir /data
+    
+    # Persistence - AOF
+    appendonly yes
+    appendfilename "appendonly.aof"
+    appendfsync everysec
+    no-appendfsync-on-rewrite no
+    auto-aof-rewrite-percentage 100
+    auto-aof-rewrite-min-size 64mb
+    aof-load-truncated yes
+    
+    # Memory Management
+    maxmemory 1gb
+    maxmemory-policy allkeys-lru
+    maxmemory-samples 5
+    
+    # Replication
+    repl-diskless-sync no
+    repl-diskless-sync-delay 5
+    repl-disable-tcp-nodelay no
+    replica-priority 100
+    
+    # Security
+    # requirepass CHANGE_ME_IN_PRODUCTION
+    # masterauth CHANGE_ME_IN_PRODUCTION
+    
+    # Limits
+    maxclients 10000
+    
+    # Slow Log
+    slowlog-log-slower-than 10000
+    slowlog-max-len 128
+---
+# Redis Cluster StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis-cluster
+  namespace: agentmesh
+  labels:
+    app: redis-cluster
+spec:
+  serviceName: redis-cluster-headless
+  replicas: 6  # 3 masters + 3 replicas
+  selector:
+    matchLabels:
+      app: redis-cluster
+  template:
+    metadata:
+      labels:
+        app: redis-cluster
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+      
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        imagePullPolicy: IfNotPresent
+        
+        command:
+        - redis-server
+        - /usr/local/etc/redis/redis.conf
+        - --cluster-announce-ip
+        - $(POD_IP)
+        
+        env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        
+        ports:
+        - name: redis
+          containerPort: 6379
+          protocol: TCP
+        - name: cluster-bus
+          containerPort: 16379
+          protocol: TCP
+        
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1.5Gi"
+            cpu: "1000m"
+        
+        livenessProbe:
+          tcpSocket:
+            port: 6379
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - redis-cli -h $(hostname) ping | grep PONG
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+        - name: redis-config
+          mountPath: /usr/local/etc/redis
+      
+      volumes:
+      - name: redis-config
+        configMap:
+          name: redis-cluster-config
+  
+  volumeClaimTemplates:
+  - metadata:
+      name: redis-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 20Gi
+      storageClassName: standard
+---
+# Redis Cluster Headless Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-cluster-headless
+  namespace: agentmesh
+  labels:
+    app: redis-cluster
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true  # Important for cluster formation
+  selector:
+    app: redis-cluster
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: 6379
+    protocol: TCP
+  - name: cluster-bus
+    port: 16379
+    targetPort: 16379
+    protocol: TCP
+---
+# Redis Cluster Service (for clients)
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-cluster-service
+  namespace: agentmesh
+  labels:
+    app: redis-cluster
+spec:
+  type: ClusterIP
+  selector:
+    app: redis-cluster
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: 6379
+    protocol: TCP
+---
+# Job to initialize Redis Cluster
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: redis-cluster-init
+  namespace: agentmesh
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: redis-cluster-init
+        image: redis:7-alpine
+        
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+        
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for all Redis pods to be ready..."
+          sleep 30
+          
+          echo "Creating Redis Cluster..."
+          redis-cli --cluster create \
+            redis-cluster-0.redis-cluster-headless.agentmesh.svc.cluster.local:6379 \
+            redis-cluster-1.redis-cluster-headless.agentmesh.svc.cluster.local:6379 \
+            redis-cluster-2.redis-cluster-headless.agentmesh.svc.cluster.local:6379 \
+            redis-cluster-3.redis-cluster-headless.agentmesh.svc.cluster.local:6379 \
+            redis-cluster-4.redis-cluster-headless.agentmesh.svc.cluster.local:6379 \
+            redis-cluster-5.redis-cluster-headless.agentmesh.svc.cluster.local:6379 \
+            --cluster-replicas 1 \
+            --cluster-yes
+          
+          echo "Redis Cluster created successfully!"
+          
+          echo "Cluster info:"
+          redis-cli -h redis-cluster-0.redis-cluster-headless.agentmesh.svc.cluster.local cluster info
+          
+          echo "Cluster nodes:"
+          redis-cli -h redis-cluster-0.redis-cluster-headless.agentmesh.svc.cluster.local cluster nodes
+---
+# Redis Sentinel ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-sentinel-config
+  namespace: agentmesh
+data:
+  sentinel.conf: |
+    # Sentinel configuration
+    port 26379
+    bind 0.0.0.0
+    
+    # Monitor Redis masters
+    sentinel monitor mymaster redis-cluster-0.redis-cluster-headless.agentmesh.svc.cluster.local 6379 2
+    sentinel down-after-milliseconds mymaster 5000
+    sentinel parallel-syncs mymaster 1
+    sentinel failover-timeout mymaster 10000
+    
+    # Security
+    # sentinel auth-pass mymaster CHANGE_ME_IN_PRODUCTION
+    
+    # Logging
+    loglevel notice
+---
+# Redis Sentinel Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-sentinel
+  namespace: agentmesh
+  labels:
+    app: redis-sentinel
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: redis-sentinel
+  template:
+    metadata:
+      labels:
+        app: redis-sentinel
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+      
+      containers:
+      - name: sentinel
+        image: redis:7-alpine
+        imagePullPolicy: IfNotPresent
+        
+        command:
+        - redis-sentinel
+        - /usr/local/etc/redis/sentinel.conf
+        
+        ports:
+        - name: sentinel
+          containerPort: 26379
+          protocol: TCP
+        
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        
+        livenessProbe:
+          tcpSocket:
+            port: 26379
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - -p
+            - "26379"
+            - ping
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        
+        volumeMounts:
+        - name: sentinel-config
+          mountPath: /usr/local/etc/redis
+      
+      volumes:
+      - name: sentinel-config
+        configMap:
+          name: redis-sentinel-config
+---
+# Redis Sentinel Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-sentinel-service
+  namespace: agentmesh
+  labels:
+    app: redis-sentinel
+spec:
+  type: ClusterIP
+  selector:
+    app: redis-sentinel
+  ports:
+  - name: sentinel
+    port: 26379
+    targetPort: 26379
+    protocol: TCP
