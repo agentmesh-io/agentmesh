@@ -66,6 +66,9 @@ public class MASTDetector {
         // FM-2.4: State Inconsistency Detection
         detectStateInconsistency(entry);
 
+        // FM-3.3: Format Violation Detection
+        detectFormatViolation(entry);
+
         // FM-1.4: Context Loss Detection
         detectContextLoss(entry);
 
@@ -745,6 +748,167 @@ public class MASTDetector {
                 }
             }
         }
+    }
+    
+    /**
+     * FM-3.3: Format Violation Detection
+     * Detects when agent output doesn't conform to expected format:
+     * - JSON parsing errors
+     * - Missing required fields in structured data
+     * - Invalid file extensions for code artifacts
+     * - Malformed URLs or API endpoints
+     * - Invalid version numbers or semantic versioning
+     */
+    private void detectFormatViolation(BlackboardEntry entry) {
+        String content = entry.getContent();
+        if (content == null || content.isBlank()) {
+            return;
+        }
+        
+        String lowerContent = content.toLowerCase();
+        String entryType = entry.getEntryType();
+        
+        // Detect JSON format violations (common in CODE and CONFIG entries)
+        if (entryType.equals("CODE") || entryType.equals("CONFIG") || entryType.equals("TOOL_OUTPUT")) {
+            // Check for malformed JSON
+            if (content.contains("{") && content.contains("}")) {
+                // Look for common JSON syntax errors
+                if (content.matches(".*\\{[^}]*\\{.*") && !content.matches(".*\\}.*\\}.*")) {
+                    createFormatViolation(entry, "Unbalanced JSON braces - missing closing brace");
+                    return;
+                }
+                
+                // Check for missing quotes around keys
+                if (content.matches(".*\\{\\s*[a-zA-Z_][a-zA-Z0-9_]*\\s*:.*")) {
+                    if (!content.matches(".*\\{\\s*\"[a-zA-Z_][a-zA-Z0-9_]*\"\\s*:.*")) {
+                        createFormatViolation(entry, "JSON keys must be quoted strings");
+                        return;
+                    }
+                }
+                
+                // Check for trailing commas (common error)
+                if (content.matches(".*,\\s*[}\\]].*")) {
+                    createFormatViolation(entry, "Trailing comma in JSON object or array");
+                    return;
+                }
+            }
+        }
+        
+        // Detect missing required fields in structured outputs
+        if (entryType.equals("SRS")) {
+            // SRS should contain key sections
+            boolean hasRequirements = lowerContent.contains("requirement") || 
+                                     lowerContent.contains("functional") ||
+                                     lowerContent.contains("non-functional");
+            boolean hasObjectives = lowerContent.contains("objective") || 
+                                   lowerContent.contains("goal") ||
+                                   lowerContent.contains("purpose");
+            
+            if (!hasRequirements && !hasObjectives && content.length() > 50) {
+                createFormatViolation(entry, "SRS missing required sections (requirements/objectives)");
+                return;
+            }
+        }
+        
+        if (entryType.equals("TASK_BREAKDOWN")) {
+            // Task breakdown should list tasks/steps
+            boolean hasTasks = lowerContent.contains("task") || 
+                              lowerContent.contains("step") ||
+                              lowerContent.contains("phase") ||
+                              content.matches(".*[1-9]\\.|\\d+\\).*"); // numbered lists
+            
+            if (!hasTasks && content.length() > 30) {
+                createFormatViolation(entry, "Task breakdown missing task list or step structure");
+                return;
+            }
+        }
+        
+        if (entryType.equals("CODE")) {
+            // Check for invalid file extensions mentioned
+            if (content.matches(".*\\.([a-zA-Z0-9]{6,}).*")) {
+                createFormatViolation(entry, "Suspiciously long file extension detected");
+                return;
+            }
+            
+            // Check for malformed function/method signatures
+            if (content.contains("public") || content.contains("private") || content.contains("function")) {
+                // Look for functions with no parameters parentheses
+                if (content.matches(".*\\b(function|def|fn)\\s+[a-zA-Z_][a-zA-Z0-9_]*[^\\(\\s].*")) {
+                    createFormatViolation(entry, "Function declaration missing parentheses");
+                    return;
+                }
+            }
+        }
+        
+        // Detect malformed URLs (common in API documentation)
+        if (lowerContent.contains("http") || lowerContent.contains("api")) {
+            // Check for incomplete URLs
+            if (content.matches(".*https?://[^\\s/]+\\s+\\S+.*") || 
+                content.matches(".*https?:/[^/].*")) {
+                createFormatViolation(entry, "Malformed URL format detected");
+                return;
+            }
+        }
+        
+        // Detect invalid version numbers
+        if (lowerContent.contains("version")) {
+            // Check for nonsensical version numbers
+            if (content.matches(".*version\\s+\\d{2,}\\.\\d{2,}\\.\\d{2,}.*")) {
+                createFormatViolation(entry, "Suspiciously high version numbers (not semantic versioning)");
+                return;
+            }
+            
+            // Check for version without numbers
+            if (content.matches("(?i).*version\\s+[a-z]+\\s.*") && 
+                !lowerContent.contains("latest") && 
+                !lowerContent.contains("current")) {
+                createFormatViolation(entry, "Version specified without version number");
+                return;
+            }
+        }
+        
+        // Detect incomplete code blocks (markdown or similar)
+        if (content.contains("```")) {
+            int openCount = content.split("```").length - 1;
+            if (openCount % 2 != 0) {
+                createFormatViolation(entry, "Unclosed code block (unbalanced backticks)");
+                return;
+            }
+        }
+        
+        // Detect placeholder text that wasn't replaced
+        String[] placeholders = {"TODO", "FIXME", "XXX", "PLACEHOLDER", "<INSERT", "FILL_IN", "TBD"};
+        for (String placeholder : placeholders) {
+            if (content.toUpperCase().contains(placeholder) && 
+                (entryType.equals("CODE") || entryType.equals("CONFIG"))) {
+                createFormatViolation(entry, "Output contains placeholder text: " + placeholder);
+                return;
+            }
+        }
+    }
+    
+    private void createFormatViolation(BlackboardEntry entry, String reason) {
+        String evidence = String.format(
+            "Agent %s produced output with format issues in entry '%s' of type %s. Issue: %s. " +
+            "Content preview: %.200s%s",
+            entry.getAgentId(),
+            entry.getTitle(),
+            entry.getEntryType(),
+            reason,
+            entry.getContent(),
+            entry.getContent().length() > 200 ? "..." : ""
+        );
+        
+        MASTViolation violation = new MASTViolation(
+            entry.getAgentId(),
+            MASTFailureMode.FM_3_3_FORMAT_VIOLATION,
+            String.valueOf(entry.getId()),
+            evidence
+        );
+        
+        violationRepository.save(violation);
+        log.warn("Detected FM-3.3 Format Violation: {} in entry {} - {}", 
+            entry.getAgentId(), entry.getTitle(), reason);
     }
     
     /**
