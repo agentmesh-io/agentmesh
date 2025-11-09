@@ -1,0 +1,111 @@
+---
+# Cert-Manager ClusterIssuers for TLS Certificate Management
+
+# Let's Encrypt Staging Issuer (for testing)
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    # Staging server for testing
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: admin@example.com  # Replace with your email
+    privateKeySecretRef:
+      name: letsencrypt-staging
+    solvers:
+    # HTTP-01 challenge
+    - http01:
+        ingress:
+          class: nginx
+    # DNS-01 challenge for wildcard certificates (optional)
+    - dns01:
+        cloudflare:  # Replace with your DNS provider
+          email: admin@example.com
+          apiTokenSecretRef:
+            name: cloudflare-api-token
+            key: api-token
+
+---
+# Let's Encrypt Production Issuer
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    # Production server
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@example.com  # Replace with your email
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+    # HTTP-01 challenge
+    - http01:
+        ingress:
+          class: nginx
+    # DNS-01 challenge for wildcard certificates (optional)
+    - dns01:
+        cloudflare:  # Replace with your DNS provider
+          email: admin@example.com
+          apiTokenSecretRef:
+            name: cloudflare-api-token
+            key: api-token
+
+---
+# Self-Signed Issuer (for development)
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned
+spec:
+  selfSigned: {}
+
+---
+# Certificate for Development
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: agentmesh-dev-cert
+  namespace: agentmesh-dev
+spec:
+  secretName: agentmesh-tls-dev
+  issuerRef:
+    name: selfsigned
+    kind: ClusterIssuer
+  dnsNames:
+  - agentmesh-dev.local
+  - "*.agentmesh-dev.local"
+
+---
+# Certificate for Staging
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: agentmesh-staging-cert
+  namespace: agentmesh-staging
+spec:
+  secretName: agentmesh-tls-staging
+  issuerRef:
+    name: letsencrypt-staging
+    kind: ClusterIssuer
+  dnsNames:
+  - agentmesh-staging.example.com
+  - api-staging.agentmesh.example.com
+
+---
+# Certificate for Production
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: agentmesh-prod-cert
+  namespace: agentmesh-prod
+spec:
+  secretName: agentmesh-tls-prod
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+  - agentmesh.example.com
+  - api.agentmesh.example.com
+  - "*.agentmesh.example.com"  # Wildcard (requires DNS-01)

@@ -1,0 +1,56 @@
+---
+# Staging Ingress Configuration
+# TLS with staging certificates
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agentmesh-ingress-staging
+  namespace: agentmesh-staging
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-staging
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "50"
+    nginx.ingress.kubernetes.io/limit-rps: "5"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - agentmesh-staging.example.com
+    - api-staging.agentmesh.example.com
+    secretName: agentmesh-tls-staging
+  rules:
+  - host: agentmesh-staging.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: agentmesh-service
+            port:
+              number: 8080
+      - path: /actuator
+        pathType: Prefix
+        backend:
+          service:
+            name: agentmesh-service
+            port:
+              number: 8080
+  - host: api-staging.agentmesh.example.com
+    http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: agentmesh-service
+            port:
+              number: 8080

@@ -1,0 +1,194 @@
+---
+# Canary Deployment Configuration
+# Progressive traffic shifting for safe deployments
+
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: agentmesh-canary
+  namespace: agentmesh-prod
+spec:
+  hosts:
+  - agentmesh-service
+  http:
+  # Stage 1: 10% canary traffic
+  - match:
+    - headers:
+        X-Canary-User:
+          exact: "true"
+    route:
+    - destination:
+        host: agentmesh-service
+        subset: canary
+      weight: 100
+  
+  # Stage 2: Gradual rollout
+  - route:
+    - destination:
+        host: agentmesh-service
+        subset: v1
+      weight: 90  # Stable version
+    - destination:
+        host: agentmesh-service
+        subset: canary
+      weight: 10  # Canary version
+    
+    # Mirror traffic to canary for testing
+    mirror:
+      host: agentmesh-service
+      subset: canary
+    mirrorPercentage:
+      value: 10.0
+
+---
+# Traffic splitting by tenant (A/B testing)
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: agentmesh-ab-test
+  namespace: agentmesh-prod
+spec:
+  hosts:
+  - agentmesh-service
+  http:
+  # Beta tenants get v2
+  - match:
+    - headers:
+        X-Tenant-ID:
+          regex: "^(tenant-001|tenant-002|tenant-003)$"
+    route:
+    - destination:
+        host: agentmesh-service
+        subset: v2
+  
+  # All others get v1
+  - route:
+    - destination:
+        host: agentmesh-service
+        subset: v1
+
+---
+# Fault injection for chaos testing
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: agentmesh-fault-injection
+  namespace: agentmesh-staging
+spec:
+  hosts:
+  - agentmesh-service
+  http:
+  - fault:
+      # Inject 5% delays
+      delay:
+        percentage:
+          value: 5.0
+        fixedDelay: 5s
+      
+      # Inject 1% errors
+      abort:
+        percentage:
+          value: 1.0
+        httpStatus: 500
+    
+    route:
+    - destination:
+        host: agentmesh-service
+
+---
+# Rate limiting with Envoy filter
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: agentmesh-rate-limit
+  namespace: agentmesh-prod
+spec:
+  workloadSelector:
+    labels:
+      app: agentmesh
+  configPatches:
+  - applyTo: HTTP_FILTER
+    match:
+      context: SIDECAR_INBOUND
+      listener:
+        filterChain:
+          filter:
+            name: envoy.filters.network.http_connection_manager
+            subFilter:
+              name: envoy.filters.http.router
+    patch:
+      operation: INSERT_BEFORE
+      value:
+        name: envoy.filters.http.local_ratelimit
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
+          stat_prefix: http_local_rate_limiter
+          token_bucket:
+            max_tokens: 100
+            tokens_per_fill: 100
+            fill_interval: 1s
+          filter_enabled:
+            runtime_key: local_rate_limit_enabled
+            default_value:
+              numerator: 100
+              denominator: HUNDRED
+          filter_enforced:
+            runtime_key: local_rate_limit_enforced
+            default_value:
+              numerator: 100
+              denominator: HUNDRED
+
+---
+# Retry policy for resilience
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: agentmesh-retry
+  namespace: agentmesh-prod
+spec:
+  hosts:
+  - agentmesh-service
+  http:
+  - route:
+    - destination:
+        host: agentmesh-service
+    retries:
+      attempts: 3
+      perTryTimeout: 10s
+      retryOn: 5xx,reset,connect-failure,refused-stream,retriable-4xx
+    timeout: 30s
+
+---
+# Timeout configuration
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: agentmesh-timeout
+  namespace: agentmesh-prod
+spec:
+  hosts:
+  - agentmesh-service
+  http:
+  # LLM endpoints - longer timeout
+  - match:
+    - uri:
+        prefix: /api/v1/agents/execute
+    route:
+    - destination:
+        host: agentmesh-service
+    timeout: 120s
+  
+  # MAST validation - medium timeout
+  - match:
+    - uri:
+        prefix: /api/v1/mast
+    route:
+    - destination:
+        host: agentmesh-service
+    timeout: 60s
+  
+  # Default timeout
+  - route:
+    - destination:
+        host: agentmesh-service
+    timeout: 30s
