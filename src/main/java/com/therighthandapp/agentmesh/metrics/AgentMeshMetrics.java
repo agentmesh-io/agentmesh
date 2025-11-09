@@ -51,6 +51,16 @@ public class AgentMeshMetrics {
 
     // MAST violation counters per failure mode
     private final Map<MASTFailureMode, Counter> mastViolationCounters = new ConcurrentHashMap<>();
+    
+    // Cache metrics (Week 3 caching layer)
+    private final Counter cacheHits;
+    private final Counter cacheMisses;
+    private final Timer cacheOperationDuration;
+    
+    // Database connection pool metrics
+    private final Gauge hikariActiveConnections;
+    private final Gauge hikariIdleConnections;
+    private final Gauge hikariPendingThreads;
 
     public AgentMeshMetrics(MeterRegistry meterRegistry, MASTValidator mastValidator) {
         this.meterRegistry = meterRegistry;
@@ -143,6 +153,54 @@ public class AgentMeshMetrics {
         Gauge.builder("agentmesh.mast.unresolved.violations", mastValidator,
                 v -> v.getUnresolvedViolations().size())
                 .description("Number of unresolved MAST violations")
+                .register(meterRegistry);
+        
+        // Initialize cache metrics (Week 3 caching layer)
+        this.cacheHits = Counter.builder("agentmesh.cache.hits")
+                .description("Total cache hits")
+                .register(meterRegistry);
+        
+        this.cacheMisses = Counter.builder("agentmesh.cache.misses")
+                .description("Total cache misses")
+                .register(meterRegistry);
+        
+        this.cacheOperationDuration = Timer.builder("agentmesh.cache.operation.duration")
+                .description("Cache operation duration")
+                .register(meterRegistry);
+        
+        // Database connection pool metrics (HikariCP)
+        // Note: These will be null if HikariCP metrics are not available
+        this.hikariActiveConnections = Gauge.builder("agentmesh.hikari.connections.active",
+                meterRegistry, reg -> {
+                    try {
+                        return reg.find("hikaricp.connections.active").gauge().value();
+                    } catch (Exception e) {
+                        return 0.0;
+                    }
+                })
+                .description("Active HikariCP connections")
+                .register(meterRegistry);
+        
+        this.hikariIdleConnections = Gauge.builder("agentmesh.hikari.connections.idle",
+                meterRegistry, reg -> {
+                    try {
+                        return reg.find("hikaricp.connections.idle").gauge().value();
+                    } catch (Exception e) {
+                        return 0.0;
+                    }
+                })
+                .description("Idle HikariCP connections")
+                .register(meterRegistry);
+        
+        this.hikariPendingThreads = Gauge.builder("agentmesh.hikari.connections.pending",
+                meterRegistry, reg -> {
+                    try {
+                        return reg.find("hikaricp.connections.pending").gauge().value();
+                    } catch (Exception e) {
+                        return 0.0;
+                    }
+                })
+                .description("Pending HikariCP connection requests")
                 .register(meterRegistry);
     }
 
@@ -290,5 +348,59 @@ public class AgentMeshMetrics {
         
         meterRegistry.summary("agentmesh.memory.search.results", "tenant_id", tenantId)
                 .record(resultsCount);
+    }
+    
+    // ==================== Cache Metrics (Week 3) ====================
+    
+    /**
+     * Record cache hit
+     */
+    public void recordCacheHit(String cacheName) {
+        cacheHits.increment();
+        Counter.builder("agentmesh.cache.hits.by_name")
+                .tag("cache_name", cacheName)
+                .register(meterRegistry)
+                .increment();
+    }
+    
+    /**
+     * Record cache miss
+     */
+    public void recordCacheMiss(String cacheName) {
+        cacheMisses.increment();
+        Counter.builder("agentmesh.cache.misses.by_name")
+                .tag("cache_name", cacheName)
+                .register(meterRegistry)
+                .increment();
+    }
+    
+    /**
+     * Record cache operation
+     */
+    public void recordCacheOperation(String cacheName, String operation, Duration duration) {
+        Timer.builder("agentmesh.cache.operation.duration")
+                .tag("cache_name", cacheName)
+                .tag("operation", operation)
+                .register(meterRegistry)
+                .record(duration);
+    }
+    
+    /**
+     * Get cache hit rate for a specific cache
+     */
+    public double getCacheHitRate(String cacheName) {
+        Counter hitsCounter = meterRegistry.find("agentmesh.cache.hits.by_name")
+                .tag("cache_name", cacheName)
+                .counter();
+        
+        Counter missesCounter = meterRegistry.find("agentmesh.cache.misses.by_name")
+                .tag("cache_name", cacheName)
+                .counter();
+        
+        double hits = hitsCounter != null ? hitsCounter.count() : 0.0;
+        double misses = missesCounter != null ? missesCounter.count() : 0.0;
+        double total = hits + misses;
+        
+        return total > 0 ? (hits / total) * 100 : 0.0;
     }
 }
