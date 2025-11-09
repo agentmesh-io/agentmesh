@@ -75,6 +75,11 @@ public class MASTDetector {
         // FM-3.5: Timeout Detection
         detectTimeout(entry);
 
+        // FM-3.6: Tool Execution Failure Detection
+        if ("TOOL_OUTPUT".equals(entry.getEntryType()) || "CODE".equals(entry.getEntryType())) {
+            detectToolExecutionFailure(entry);
+        }
+
         // FM-1.4: Context Loss Detection
         detectContextLoss(entry);
 
@@ -1359,6 +1364,217 @@ public class MASTDetector {
         
         violationRepository.save(violation);
         log.warn("Detected FM-3.5 Timeout: {} in entry {} - {}", 
+            entry.getAgentId(), entry.getTitle(), reason);
+    }
+    
+    /**
+     * FM-3.6: Tool Execution Failure Detection
+     * Detects when agents report failed tool executions or encounter errors:
+     * - Compilation errors (javac, gcc, etc.)
+     * - Test failures and assertion errors
+     * - Build tool failures (Maven, Gradle, npm)
+     * - Deployment failures
+     * - Database connection errors
+     * - API call failures (4xx, 5xx status codes)
+     * - File I/O errors
+     * - Permission denied errors
+     * - Null pointer exceptions and runtime errors
+     */
+    private void detectToolExecutionFailure(BlackboardEntry entry) {
+        String content = entry.getContent();
+        if (content == null || content.isBlank()) {
+            return;
+        }
+        
+        String lowerContent = content.toLowerCase();
+        
+        // Check for explicit error indicators
+        if (!lowerContent.contains("error") && 
+            !lowerContent.contains("fail") && 
+            !lowerContent.contains("exception") &&
+            !lowerContent.contains("denied")) {
+            return; // No error indicators found
+        }
+        
+        // Compilation errors
+        String[] compilationErrors = {
+            "compilation failed", "compile error", "compilation error",
+            "syntax error", "cannot find symbol", "undefined reference",
+            "error: expected", "error: invalid", "parse error",
+            "javac: error", "gcc: error", "tsc: error"
+        };
+        
+        for (String error : compilationErrors) {
+            if (lowerContent.contains(error)) {
+                createToolFailureViolation(entry, 
+                    "Compilation error detected: '" + error + "'");
+                return;
+            }
+        }
+        
+        // Test failures
+        String[] testFailures = {
+            "test failed", "tests failed", "test failure",
+            "assertion failed", "assertionerror", "expected but was",
+            "junit", "testng", "mocha failed", "jest failed",
+            "pytest failed", "test case failed", "0 passed"
+        };
+        
+        for (String failure : testFailures) {
+            if (lowerContent.contains(failure)) {
+                createToolFailureViolation(entry,
+                    "Test failure detected: '" + failure + "'");
+                return;
+            }
+        }
+        
+        // Build tool failures
+        String[] buildErrors = {
+            "build failed", "build failure", "maven build failure",
+            "gradle build failed", "npm err!", "yarn error",
+            "[error]", "build error", "compilation failure",
+            "resolution failed", "dependency not found"
+        };
+        
+        for (String error : buildErrors) {
+            if (lowerContent.contains(error)) {
+                createToolFailureViolation(entry,
+                    "Build tool failure: '" + error + "'");
+                return;
+            }
+        }
+        
+        // Deployment failures
+        String[] deploymentErrors = {
+            "deployment failed", "deploy error", "deployment error",
+            "failed to deploy", "rollback", "deployment unsuccessful",
+            "container failed", "pod error", "service unavailable"
+        };
+        
+        for (String error : deploymentErrors) {
+            if (lowerContent.contains(error)) {
+                createToolFailureViolation(entry,
+                    "Deployment failure: '" + error + "'");
+                return;
+            }
+        }
+        
+        // Database errors
+        String[] databaseErrors = {
+            "connection refused", "connection failed", "sql error",
+            "database error", "query failed", "duplicate key",
+            "constraint violation", "foreign key", "deadlock",
+            "table does not exist", "column does not exist"
+        };
+        
+        for (String error : databaseErrors) {
+            if (lowerContent.contains(error)) {
+                createToolFailureViolation(entry,
+                    "Database error: '" + error + "'");
+                return;
+            }
+        }
+        
+        // HTTP/API errors
+        String[] apiErrors = {
+            "http error", "status code 4", "status code 5",
+            "400 bad request", "401 unauthorized", "403 forbidden",
+            "404 not found", "500 internal server", "502 bad gateway",
+            "503 service unavailable", "504 gateway timeout"
+        };
+        
+        for (String error : apiErrors) {
+            if (lowerContent.contains(error)) {
+                createToolFailureViolation(entry,
+                    "API/HTTP error: '" + error + "'");
+                return;
+            }
+        }
+        
+        // File I/O errors
+        String[] ioErrors = {
+            "file not found", "filenotfoundexception", "no such file",
+            "io error", "ioexception", "cannot read", "cannot write",
+            "access denied", "permission denied", "disk full"
+        };
+        
+        for (String error : ioErrors) {
+            if (lowerContent.contains(error)) {
+                createToolFailureViolation(entry,
+                    "File I/O error: '" + error + "'");
+                return;
+            }
+        }
+        
+        // Runtime exceptions
+        String[] runtimeErrors = {
+            "nullpointerexception", "null pointer", "npe",
+            "classcastexception", "arrayindexoutofbounds",
+            "illegalargumentexception", "illegalstateexception",
+            "runtime error", "exception in thread", "stack trace"
+        };
+        
+        for (String error : runtimeErrors) {
+            if (lowerContent.contains(error)) {
+                createToolFailureViolation(entry,
+                    "Runtime error/exception: '" + error + "'");
+                return;
+            }
+        }
+        
+        // Generic fatal errors
+        String[] fatalErrors = {
+            "fatal error", "critical error", "panic:",
+            "segmentation fault", "core dumped", "killed",
+            "aborted", "terminated unexpectedly"
+        };
+        
+        for (String error : fatalErrors) {
+            if (lowerContent.contains(error)) {
+                createToolFailureViolation(entry,
+                    "Fatal error: '" + error + "'");
+                return;
+            }
+        }
+        
+        // Check for stack traces (strong indicator of errors)
+        if (content.matches("(?s).*\\s+at\\s+[a-zA-Z0-9_.$]+\\([^)]*\\).*")) {
+            createToolFailureViolation(entry,
+                "Stack trace detected - indicates exception/error occurred");
+            return;
+        }
+        
+        // Check for exit codes indicating failure
+        if (lowerContent.matches(".*exit code [1-9]\\d*.*") ||
+            lowerContent.matches(".*returned [1-9]\\d*.*") ||
+            lowerContent.matches(".*error code [1-9]\\d*.*")) {
+            createToolFailureViolation(entry,
+                "Non-zero exit code detected - command failed");
+            return;
+        }
+    }
+    
+    private void createToolFailureViolation(BlackboardEntry entry, String reason) {
+        String evidence = String.format(
+            "Agent %s encountered tool execution failure in entry '%s' of type %s. Issue: %s. " +
+            "Content preview: %.200s%s",
+            entry.getAgentId(),
+            entry.getTitle(),
+            entry.getEntryType(),
+            reason,
+            entry.getContent(),
+            entry.getContent().length() > 200 ? "..." : ""
+        );
+        
+        MASTViolation violation = new MASTViolation(
+            entry.getAgentId(),
+            MASTFailureMode.FM_3_6_TOOL_INVOCATION_FAILURE,
+            String.valueOf(entry.getId()),
+            evidence
+        );
+        
+        violationRepository.save(violation);
+        log.warn("Detected FM-3.6 Tool Execution Failure: {} in entry {} - {}", 
             entry.getAgentId(), entry.getTitle(), reason);
     }
     
