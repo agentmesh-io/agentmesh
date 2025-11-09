@@ -72,6 +72,9 @@ public class MASTDetector {
         // FM-3.4: Hallucination Detection
         detectHallucination(entry);
 
+        // FM-3.5: Timeout Detection
+        detectTimeout(entry);
+
         // FM-1.4: Context Loss Detection
         detectContextLoss(entry);
 
@@ -1210,6 +1213,152 @@ public class MASTDetector {
         
         violationRepository.save(violation);
         log.warn("Detected FM-3.4 Hallucination: {} in entry {} - {}", 
+            entry.getAgentId(), entry.getTitle(), reason);
+    }
+    
+    /**
+     * FM-3.5: Timeout Detection
+     * Detects when agents take too long between entries or appear stalled:
+     * - Long gaps between entries from the same agent (>30 minutes)
+     * - Agent claims to be working but produces no output
+     * - Repetitive "in progress" messages without actual deliverables
+     * - Entry mentions "timeout", "stuck", or "hanging"
+     */
+    private void detectTimeout(BlackboardEntry entry) {
+        String agentId = entry.getAgentId();
+        String tenantId = entry.getTenantId();
+        String content = entry.getContent();
+        
+        if (content == null || content.isBlank()) {
+            return;
+        }
+        
+        String lowerContent = content.toLowerCase();
+        
+        // Check for explicit timeout/stuck mentions
+        String[] timeoutIndicators = {
+            "timeout", "timed out", "time out",
+            "stuck", "hanging", "frozen",
+            "not responding", "unresponsive",
+            "taking too long", "excessive time",
+            "deadline exceeded", "exceeded limit"
+        };
+        
+        for (String indicator : timeoutIndicators) {
+            if (lowerContent.contains(indicator)) {
+                createTimeoutViolation(entry, 
+                    "Entry explicitly mentions timeout/stuck condition: '" + indicator + "'");
+                return;
+            }
+        }
+        
+        // Check for repetitive "in progress" or "working on" without deliverables
+        if (lowerContent.contains("in progress") || 
+            lowerContent.contains("working on") ||
+            lowerContent.contains("still processing")) {
+            
+            // Count how many times this agent has posted "in progress" recently
+            int progressCount = 0;
+            int deliverableCount = 0;
+            
+            for (BlackboardEntry recent : recentEntries.values()) {
+                if (!Objects.equals(agentId, recent.getAgentId())) continue;
+                if (!Objects.equals(tenantId, recent.getTenantId())) continue;
+                
+                String recentContent = recent.getContent();
+                if (recentContent == null) continue;
+                
+                String recentLower = recentContent.toLowerCase();
+                if (recentLower.contains("in progress") || 
+                    recentLower.contains("working on") ||
+                    recentLower.contains("still processing")) {
+                    progressCount++;
+                }
+                
+                // Check if they produced actual deliverables (CODE, SRS, etc.)
+                String type = recent.getEntryType();
+                if (type.equals("CODE") || type.equals("SRS") || 
+                    type.equals("TASK_BREAKDOWN") || type.equals("TEST_RESULT")) {
+                    deliverableCount++;
+                }
+            }
+            
+            // If 3+ "in progress" messages but few deliverables, likely stalled
+            if (progressCount >= 3 && deliverableCount < 2) {
+                createTimeoutViolation(entry,
+                    String.format("Agent posted %d 'in progress' updates but only %d deliverables - appears stalled",
+                        progressCount, deliverableCount));
+                return;
+            }
+        }
+        
+        // Check for long gaps between entries from same agent
+        Instant currentTime = entry.getTimestamp() != null ? entry.getTimestamp() : Instant.now();
+        Instant lastEntryTime = null;
+        
+        for (BlackboardEntry recent : recentEntries.values()) {
+            if (!Objects.equals(agentId, recent.getAgentId())) continue;
+            if (!Objects.equals(tenantId, recent.getTenantId())) continue;
+            if (Objects.equals(entry.getId(), recent.getId())) continue; // Skip current entry
+            
+            Instant recentTime = recent.getTimestamp() != null ? recent.getTimestamp() : Instant.now();
+            if (lastEntryTime == null || recentTime.isAfter(lastEntryTime)) {
+                lastEntryTime = recentTime;
+            }
+        }
+        
+        if (lastEntryTime != null) {
+            long minutesBetween = java.time.Duration.between(lastEntryTime, currentTime).toMinutes();
+            
+            // If >30 minutes between entries, flag as potential timeout
+            if (minutesBetween > 30) {
+                createTimeoutViolation(entry,
+                    String.format("Long gap detected: %d minutes since last entry from this agent", 
+                        minutesBetween));
+                return;
+            }
+        }
+        
+        // Check for error messages indicating timeouts
+        if (lowerContent.contains("error") || lowerContent.contains("exception")) {
+            String[] errorPatterns = {
+                "timeout exception", "timeoutexception",
+                "read timed out", "connection timeout",
+                "execution timed out", "operation timeout",
+                "request timeout", "socket timeout"
+            };
+            
+            for (String pattern : errorPatterns) {
+                if (lowerContent.contains(pattern)) {
+                    createTimeoutViolation(entry,
+                        "Entry contains timeout error message: '" + pattern + "'");
+                    return;
+                }
+            }
+        }
+    }
+    
+    private void createTimeoutViolation(BlackboardEntry entry, String reason) {
+        String evidence = String.format(
+            "Agent %s appears to have timeout/stalled condition in entry '%s' of type %s. Issue: %s. " +
+            "Content preview: %.200s%s",
+            entry.getAgentId(),
+            entry.getTitle(),
+            entry.getEntryType(),
+            reason,
+            entry.getContent(),
+            entry.getContent().length() > 200 ? "..." : ""
+        );
+        
+        MASTViolation violation = new MASTViolation(
+            entry.getAgentId(),
+            MASTFailureMode.FM_3_5_TIMEOUT,
+            String.valueOf(entry.getId()),
+            evidence
+        );
+        
+        violationRepository.save(violation);
+        log.warn("Detected FM-3.5 Timeout: {} in entry {} - {}", 
             entry.getAgentId(), entry.getTitle(), reason);
     }
     
