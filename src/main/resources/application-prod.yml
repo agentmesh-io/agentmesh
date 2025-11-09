@@ -1,0 +1,200 @@
+# Production configuration for AgentMesh
+# Override development settings for production deployment
+
+spring:
+  # PostgreSQL Database configuration (production)
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:postgres-service.agentmesh.svc.cluster.local}:${DB_PORT:5432}/${DB_NAME:agentmesh}
+    driver-class-name: org.postgresql.Driver
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD}
+    
+    # HikariCP Connection Pool (production-tuned)
+    hikari:
+      maximum-pool-size: 50
+      minimum-idle: 10
+      connection-timeout: 20000
+      idle-timeout: 300000
+      max-lifetime: 1800000
+      validation-timeout: 5000
+      auto-commit: false
+      leak-detection-threshold: 60000
+      connection-test-query: SELECT 1
+      pool-name: AgentMeshHikariPool-Prod
+      register-mbeans: true
+      
+      # PostgreSQL-specific optimizations
+      data-source-properties:
+        cachePrepStmts: true
+        prepStmtCacheSize: 250
+        prepStmtCacheSqlLimit: 2048
+        useServerPrepStmts: true
+        reWriteBatchedInserts: true
+
+  # JPA/Hibernate configuration (production)
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: validate  # Never auto-create schema in production
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+        jdbc:
+          batch_size: 50
+          fetch_size: 50
+        order_inserts: true
+        order_updates: true
+        query:
+          in_clause_parameter_padding: true
+
+  # Flyway (production)
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+    locations: classpath:db/migration
+    table: flyway_schema_history
+    validate-on-migrate: true
+    clean-disabled: true  # CRITICAL: Never allow clean in production
+    out-of-order: false
+    placeholder-replacement: true
+
+  # H2 Console (disabled in production)
+  h2:
+    console:
+      enabled: false
+
+  # Kafka Configuration (production)
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka-service.agentmesh.svc.cluster.local:9092}
+    consumer:
+      group-id: agentmesh-consumer
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      properties:
+        max.poll.records: 500
+        max.poll.interval.ms: 300000
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all  # Ensure all replicas acknowledge
+      retries: 3
+      compression-type: snappy
+      properties:
+        spring.json.add.type.headers: false
+        linger.ms: 10
+        batch.size: 16384
+
+  # Redis Configuration (production)
+  data:
+    redis:
+      # Use Redis Cluster
+      cluster:
+        nodes:
+          - ${REDIS_HOST:redis-cluster-service.agentmesh.svc.cluster.local}:6379
+        max-redirects: 3
+      password: ${REDIS_PASSWORD:}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 50
+          max-idle: 20
+          min-idle: 10
+          max-wait: 2000ms
+        cluster:
+          refresh:
+            adaptive: true
+            period: 30s
+
+# AgentMesh Configuration (production)
+agentmesh:
+  # Multi-tenancy (production)
+  multi-tenancy:
+    enabled: true
+    
+    # Kubernetes integration (enabled)
+    kubernetes:
+      enabled: true
+      namespace-prefix: agentmesh
+      apply-network-policies: true
+      apply-resource-quotas: true
+
+  # Kubernetes Operator (enabled)
+  operator:
+    enabled: true
+    reconcile-interval-seconds: 30
+    worker-count: 4
+
+  # GitHub Integration (production)
+  github:
+    enabled: ${GITHUB_ENABLED:true}
+    token: ${GITHUB_TOKEN}  # Required
+    repo-owner: ${GITHUB_REPO_OWNER}
+    repo-name: ${GITHUB_REPO_NAME}
+    webhook-secret: ${GITHUB_WEBHOOK_SECRET}
+    
+    projects:
+      enabled: ${GITHUB_PROJECTS_ENABLED:false}
+      project-id: ${GITHUB_PROJECT_ID:}
+
+  # Billing (production)
+  billing:
+    enabled: true
+    model: hybrid
+
+# Actuator Configuration (production)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: ${spring.application.name}
+      environment: production
+
+# Logging Configuration (production)
+logging:
+  level:
+    root: INFO
+    com.therighthandapp.agentmesh: INFO
+    org.springframework: WARN
+    org.hibernate: WARN
+    io.temporal: INFO
+    org.flywaydb: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: /var/log/agentmesh/application.log
+    max-size: 100MB
+    max-history: 30
+
+# Security (production)
+server:
+  port: 8080
+  shutdown: graceful
+  error:
+    include-message: never
+    include-stacktrace: never
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/xml,text/plain
+  http2:
+    enabled: true
+  forward-headers-strategy: native
+
+  # Graceful shutdown
+  lifecycle:
+    timeout-per-shutdown-phase: 30s

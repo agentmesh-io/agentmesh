@@ -51,11 +51,26 @@ spring:
   jpa:
     database-platform: org.hibernate.dialect.H2Dialect
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: validate  # Changed from create-drop to validate (Flyway manages schema)
     show-sql: false
     properties:
       hibernate:
         format_sql: true
+
+  # Flyway Database Migration Configuration
+  flyway:
+    enabled: true                    # Enable Flyway migrations
+    baseline-on-migrate: true        # Baseline existing databases
+    baseline-version: 0              # Version to use for baseline
+    locations: classpath:db/migration  # Migration scripts location
+    table: flyway_schema_history     # Metadata table name
+    validate-on-migrate: true        # Validate migrations before applying
+    clean-disabled: true             # CRITICAL: Prevent accidental data loss
+    out-of-order: false              # Disallow out-of-order migrations
+    placeholder-replacement: true    # Enable placeholder substitution
+    sql-migration-prefix: V          # Versioned migration prefix
+    sql-migration-separator: __      # Separator between version and description
+    sql-migration-suffixes: .sql     # Migration file extensions
 
   # H2 Console (dev only)
   h2:
