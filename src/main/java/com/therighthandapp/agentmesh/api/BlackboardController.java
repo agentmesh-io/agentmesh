@@ -13,6 +13,7 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/api/blackboard")
+@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:3001"})
 public class BlackboardController {
 
     private final BlackboardService blackboardService;

@@ -15,6 +15,7 @@ import java.util.stream.Collectors;
  */
 @RestController
 @RequestMapping("/api/mast")
+@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:3001"})
 public class MASTController {
 
     private final MASTValidator mastValidator;

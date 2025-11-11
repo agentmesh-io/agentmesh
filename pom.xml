@@ -102,6 +102,12 @@
             <version>3.9.1</version>
         </dependency>
 
+        <!-- WebSocket for real-time updates -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-websocket</artifactId>
+        </dependency>
+
         <!-- Optional: actuator for observability -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
