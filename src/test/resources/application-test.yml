@@ -1,0 +1,43 @@
+# Test Profile Configuration
+
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  # Disable Flyway for tests (Hibernate creates schema)
+  flyway:
+    enabled: false
+
+  # Disable caching for tests
+  cache:
+    type: none
+
+# AgentMesh Configuration
+agentmesh:
+  multitenancy:
+    enabled: true
+  llm:
+    lora:
+      enabled: true
+      max-cached-adapters: 10
+    openai:
+      api-key: test-key-not-used
+      model: gpt-4
+
+# Logging
+logging:
+  level:
+    root: WARN
+    com.therighthandapp.agentmesh: INFO
+    org.hibernate.SQL: DEBUG

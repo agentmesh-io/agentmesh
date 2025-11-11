@@ -126,6 +126,14 @@ public class LoRAAdapterManager {
     }
 
     /**
+     * Clear all loaded adapters (primarily for testing)
+     */
+    public void clearAllAdapters() {
+        loadedAdapters.clear();
+        log.info("Cleared all loaded adapters");
+    }
+
+    /**
      * Evict least recently used adapter
      */
     private void evictLeastUsedAdapter() {

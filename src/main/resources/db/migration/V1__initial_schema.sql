@@ -205,8 +205,8 @@ SELECT
     t.organization_id,
     t.tier,
     COUNT(DISTINCT p.id) AS project_count,
-    SUM(CASE WHEN tur.timestamp > NOW() - INTERVAL '24 hours' THEN tur.total_tokens ELSE 0 END) AS tokens_24h,
-    SUM(CASE WHEN br.timestamp > NOW() - INTERVAL '24 hours' THEN br.amount ELSE 0 END) AS cost_24h
+    SUM(CASE WHEN tur.timestamp > DATEADD('HOUR', -24, NOW()) THEN tur.total_tokens ELSE 0 END) AS tokens_24h,
+    SUM(CASE WHEN br.timestamp > DATEADD('HOUR', -24, NOW()) THEN br.amount ELSE 0 END) AS cost_24h
 FROM tenants t
 LEFT JOIN projects p ON p.tenant_id = t.id
 LEFT JOIN token_usage_records tur ON tur.tenant_id = t.id

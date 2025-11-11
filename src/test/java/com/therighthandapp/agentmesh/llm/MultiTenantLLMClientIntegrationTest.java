@@ -55,11 +55,13 @@ public class MultiTenantLLMClientIntegrationTest {
 
         testTenant = tenantRepository.save(testTenant);
 
-        // Set up tenant context
+        // Set up tenant context with security attributes
         TenantContext context = new TenantContext(testTenant.getId(), projectId, "test-user");
         context.setRoles(new String[]{"DEVELOPER"});
         context.setDataPartitionKey(testTenant.getId() + "#TEST");
         context.setVectorNamespace("test_project");
+        context.setMfaEnabled(true);  // Enable MFA for security checks
+        context.setAccountLocked(false);
         TenantContext.set(context);
     }
 

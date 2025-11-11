@@ -30,7 +30,17 @@ public class MockLLMClient implements LLMClient {
         callHistory.add(record);
 
         // Check if we have a pre-configured response for this prompt
-        String response = responseMap.getOrDefault(prompt, defaultResponse);
+        String response = responseMap.get(prompt);
+        
+        // If no pre-configured response, check if a default response was explicitly set
+        if (response == null && !defaultResponse.equals("Mock LLM response")) {
+            response = defaultResponse;
+        }
+        
+        // If still no response, generate contextual response
+        if (response == null) {
+            response = generateContextualResponse("", prompt);
+        }
 
         // Mock token counting (rough estimate)
         int promptTokens = estimateTokens(prompt);
@@ -69,9 +79,14 @@ public class MockLLMClient implements LLMClient {
                 .orElse("");
 
         // Check for pre-configured response first
-        String response = responseMap.getOrDefault(lastUserMessage, null);
+        String response = responseMap.get(lastUserMessage);
         
-        // If no pre-configured response, generate contextual mock response
+        // If no pre-configured response, check if a default response was explicitly set
+        if (response == null && !defaultResponse.equals("Mock LLM response")) {
+            response = defaultResponse;
+        }
+        
+        // If still no response, generate contextual mock response
         if (response == null) {
             response = generateContextualResponse(systemMessage, lastUserMessage);
         }
@@ -125,8 +140,9 @@ public class MockLLMClient implements LLMClient {
             return generateMockTestCode(userMessage);
         }
         
-        // Code generation request
-        if (lowerSystem.contains("code") || lowerSystem.contains("implement") || lowerUser.contains("implement")) {
+        // Code generation request (including hello world)
+        if (lowerSystem.contains("code") || lowerSystem.contains("implement") || lowerUser.contains("implement") ||
+            lowerUser.contains("hello world") || lowerUser.contains("function")) {
             return generateMockCode(userMessage);
         }
         
@@ -159,6 +175,13 @@ public class MockLLMClient implements LLMClient {
     }
     
     private String generateMockCode(String userMessage) {
+        // Check for hello world request
+        if (userMessage.toLowerCase().contains("hello")) {
+            return "public void helloWorld() {\n" +
+                   "    System.out.println(\"Hello, World!\");\n" +
+                   "}";
+        }
+        
         return "public class MockGeneratedCode {\n" +
                "    // Generated code for: " + userMessage.substring(0, Math.min(40, userMessage.length())) + "\n" +
                "    \n" +

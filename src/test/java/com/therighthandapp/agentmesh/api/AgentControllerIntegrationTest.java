@@ -9,12 +9,14 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.*;
+import org.springframework.test.context.ActiveProfiles;
 
 import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(classes = AgentMeshApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@ActiveProfiles("test")
 public class AgentControllerIntegrationTest {
 
     @LocalServerPort

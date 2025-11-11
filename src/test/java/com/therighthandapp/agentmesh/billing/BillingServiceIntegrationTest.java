@@ -5,6 +5,7 @@ import com.therighthandapp.agentmesh.tenant.TenantRepository;
 import com.therighthandapp.agentmesh.llm.TokenUsageRecord;
 import com.therighthandapp.agentmesh.llm.TokenUsageRepository;
 import com.therighthandapp.agentmesh.llm.TokenUsageSummary;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,6 +37,9 @@ public class BillingServiceIntegrationTest {
 
     @Autowired
     private BillingRecordRepository billingRecordRepository;
+    
+    @Autowired
+    private EntityManager entityManager;
 
     private Tenant testTenant;
     private String projectId = "test-project-id";
@@ -55,7 +59,6 @@ public class BillingServiceIntegrationTest {
     public void testTokenBasedBilling() {
         // Create token usage records
         Instant start = Instant.now().minus(30, ChronoUnit.DAYS);
-        Instant end = Instant.now();
 
         TokenUsageRecord record1 = new TokenUsageRecord();
         record1.setTenantId(testTenant.getId());
@@ -76,6 +79,12 @@ public class BillingServiceIntegrationTest {
         record2.setTotalTokens(3000);
         record2.setEstimatedCost(0.090);
         tokenUsageRepository.save(record2);
+        
+        // Flush to database so service can query them
+        entityManager.flush();
+        
+        // Set end time AFTER creating records
+        Instant end = Instant.now();
 
         // Generate billing statement
         BillingStatement statement = billingService.generateStatement(testTenant.getId(), start, end);
@@ -95,12 +104,17 @@ public class BillingServiceIntegrationTest {
     @Test
     public void testOutcomeBasedBilling() {
         Instant start = Instant.now().minus(30, ChronoUnit.DAYS);
-        Instant end = Instant.now();
 
         // Record successful tasks
         billingService.recordTaskOutcome(testTenant.getId(), projectId, "task-1", true, 1);
         billingService.recordTaskOutcome(testTenant.getId(), projectId, "task-2", true, 2);
         billingService.recordTaskOutcome(testTenant.getId(), projectId, "task-3", false, 3);
+        
+        // Flush to database
+        entityManager.flush();
+        
+        // Set end time AFTER creating records
+        Instant end = Instant.now();
 
         // Generate statement
         BillingStatement statement = billingService.generateStatement(testTenant.getId(), start, end);
@@ -116,7 +130,6 @@ public class BillingServiceIntegrationTest {
     @Test
     public void testHybridBilling() {
         Instant start = Instant.now().minus(30, ChronoUnit.DAYS);
-        Instant end = Instant.now();
 
         // Add token usage
         TokenUsageRecord record = new TokenUsageRecord();
@@ -132,6 +145,12 @@ public class BillingServiceIntegrationTest {
         // Add outcome events
         billingService.recordTaskOutcome(testTenant.getId(), projectId, "task-1", true, 1);
         billingService.recordTaskOutcome(testTenant.getId(), projectId, "task-2", true, 1);
+        
+        // Flush to database
+        entityManager.flush();
+        
+        // Set end time AFTER creating records
+        Instant end = Instant.now();
 
         // Generate statement
         BillingStatement statement = billingService.generateStatement(testTenant.getId(), start, end);

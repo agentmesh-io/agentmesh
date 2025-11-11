@@ -9,8 +9,8 @@ import java.time.Instant;
 @Entity
 @Table(name = "billing_records",
        indexes = {
-           @Index(name = "idx_tenant_timestamp", columnList = "tenantId, timestamp"),
-           @Index(name = "idx_project_timestamp", columnList = "projectId, timestamp")
+           @Index(name = "idx_billing_tenant_timestamp", columnList = "tenantId, timestamp"),
+           @Index(name = "idx_billing_project_timestamp", columnList = "projectId, timestamp")
        })
 public class BillingRecord {
 
