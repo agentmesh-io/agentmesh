@@ -4,7 +4,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import com.zaxxer.hikari.HikariPoolMXBean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.sql.init.dependency.DependsOnDatabaseInitialization;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -15,6 +15,7 @@ import javax.sql.DataSource;
  * Provides periodic logging of pool statistics for performance tuning.
  */
 @Component
+@DependsOnDatabaseInitialization
 public class ConnectionPoolMonitor {
 
     private static final Logger logger = LoggerFactory.getLogger(ConnectionPoolMonitor.class);
@@ -22,10 +23,9 @@ public class ConnectionPoolMonitor {
     private final HikariDataSource hikariDataSource;
     private final HikariPoolMXBean poolMXBean;
 
-    @Autowired
     public ConnectionPoolMonitor(DataSource dataSource) {
-        if (dataSource instanceof HikariDataSource) {
-            this.hikariDataSource = (HikariDataSource) dataSource;
+        if (dataSource instanceof HikariDataSource source) {
+            this.hikariDataSource = source;
             this.poolMXBean = hikariDataSource.getHikariPoolMXBean();
         } else {
             throw new IllegalStateException("DataSource is not a HikariDataSource");
@@ -135,9 +135,9 @@ public class ConnectionPoolMonitor {
 
         @Override
         public String toString() {
-            return String.format("PoolStatistics{max=%d, total=%d, active=%d, idle=%d, waiting=%d, util=%.1f%%}",
-                    maxPoolSize, totalConnections, activeConnections, idleConnections,
-                    threadsAwaitingConnection, getUtilizationPercent());
+            return "PoolStatistics{max=%d, total=%d, active=%d, idle=%d, waiting=%d, util=%.1f%%}".formatted(
+                maxPoolSize, totalConnections, activeConnections, idleConnections,
+                threadsAwaitingConnection, getUtilizationPercent());
         }
     }
 }

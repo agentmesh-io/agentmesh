@@ -157,12 +157,10 @@ management:
       probes:
         enabled: true
   metrics:
-    export:
-      prometheus:
-        enabled: true
     tags:
       application: ${spring.application.name}
       environment: production
+  prometheus.metrics.export.enabled: true
 
 # Logging Configuration (production)
 logging:
@@ -178,8 +176,8 @@ logging:
     file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
   file:
     name: /var/log/agentmesh/application.log
-    max-size: 100MB
-    max-history: 30
+  logback.rollingpolicy.max-history: 30
+  logback.rollingpolicy.max-file-size: 100MB
 
 # Security (production)
 server:

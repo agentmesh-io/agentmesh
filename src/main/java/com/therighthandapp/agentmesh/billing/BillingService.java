@@ -95,8 +95,8 @@ public class BillingService {
         statement.setTier(tenant.getTier());
 
         log.info("Generated billing statement for tenant {}: ${} (tokens: {}, outcomes: ${}, discount: ${})",
-            tenantId, String.format("%.2f", totalCost), usage.getTotalTokens(),
-            String.format("%.2f", outcomeCost), String.format("%.2f", discount));
+            tenantId, "%.2f".formatted(totalCost), usage.getTotalTokens(),
+            "%.2f".formatted(outcomeCost), "%.2f".formatted(discount));
 
         return statement;
     }
@@ -131,7 +131,7 @@ public class BillingService {
         billingRecordRepository.save(record);
 
         log.info("Recorded task outcome: tenant={}, task={}, success={}, cost=${}",
-            tenantId, taskId, success, String.format("%.2f", cost));
+            tenantId, taskId, success, "%.2f".formatted(cost));
     }
 
     /**

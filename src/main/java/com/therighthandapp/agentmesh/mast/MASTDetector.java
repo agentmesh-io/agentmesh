@@ -117,9 +117,9 @@ public class MASTDetector {
 
         // Check if agent queried memory within last 60 seconds
         if (lastQuery == null || lastQuery.plusSeconds(60).isBefore(entryTime)) {
-            String evidence = String.format(
+            String evidence = (
                 "Agent %s posted %s '%s' without querying memory for context. " +
-                "Last memory query: %s. This may lead to context loss and inconsistent decisions.",
+                    "Last memory query: %s. This may lead to context loss and inconsistent decisions.").formatted(
                 agentId, entry.getEntryType(), entry.getTitle(),
                 lastQuery != null ? lastQuery.toString() : "never"
             );
@@ -223,9 +223,9 @@ public class MASTDetector {
         }
 
         if (roleViolation) {
-            String evidence = String.format(
+            String evidence = (
                 "%s. Agent %s (role: %s) posted %s entry '%s'. " +
-                "This violates role separation and may lead to confusion and quality issues.",
+                    "This violates role separation and may lead to confusion and quality issues.").formatted(
                 violationReason, agentId, expectedRole, entryType, entry.getTitle()
             );
             
@@ -320,10 +320,10 @@ public class MASTDetector {
         boolean isFrequentRepetition = totalOccurrences >= 4;
         
         if (isConsecutiveLoop || isFrequentRepetition) {
-            String evidence = String.format(
+            String evidence = (
                 "Agent %s is repeating action '%s'. " +
-                "Consecutive repetitions: %d, Total in recent history: %d/%d. " +
-                "This indicates a potential infinite loop or stuck state.",
+                    "Consecutive repetitions: %d, Total in recent history: %d/%d. " +
+                    "This indicates a potential infinite loop or stuck state.").formatted(
                 agentId, action, consecutiveCount, totalOccurrences, history.size()
             );
             
@@ -428,10 +428,10 @@ public class MASTDetector {
                     (currentHasSecond && !currentHasFirst && otherHasFirst && !otherHasSecond)) {
                     
                     String conflict = currentHasFirst ? pair[0] + " vs " + pair[1] : pair[1] + " vs " + pair[0];
-                    String evidence = String.format(
+                    String evidence = (
                         "Coordination failure detected: Agent %s chose '%s' in '%s', but agent %s chose '%s' in '%s'. " +
-                        "Multiple agents making conflicting architectural decisions without coordination.",
-                        entry.getAgentId(), 
+                            "Multiple agents making conflicting architectural decisions without coordination.").formatted(
+                        entry.getAgentId(),
                         currentHasFirst ? pair[0] : pair[1],
                         entry.getTitle(),
                         other.getAgentId(),
@@ -456,9 +456,9 @@ public class MASTDetector {
 
         // Report if single entry contains conflicting patterns (indecisive)
         if (!foundPatterns.isEmpty()) {
-            String evidence = String.format(
+            String evidence = (
                 "Agent %s entry '%s' contains conflicting decisions: %s. " +
-                "Single entry should not contain mutually exclusive options without clear justification.",
+                    "Single entry should not contain mutually exclusive options without clear justification.").formatted(
                 entry.getAgentId(), entry.getTitle(), String.join(", ", foundPatterns)
             );
             
@@ -504,10 +504,10 @@ public class MASTDetector {
                 // Implementer should only create CODE after planning is done
                 if (agentRole == AgentRole.IMPLEMENTER) {
                     if (!hasPriorEntryForTenant("SRS", tenantId) && !hasPriorEntryForTenant("TASK_BREAKDOWN", tenantId)) {
-                        String evidence = String.format(
+                        String evidence = (
                             "Implementer agent %s created CODE entry '%s' before any planning (SRS or TASK_BREAKDOWN) was done. " +
-                            "Code implementation requires prior specification or task breakdown. " +
-                            "Expected workflow: Planner creates SRS/TASK_BREAKDOWN → Implementer creates CODE.",
+                                "Code implementation requires prior specification or task breakdown. " +
+                                "Expected workflow: Planner creates SRS/TASK_BREAKDOWN → Implementer creates CODE.").formatted(
                             agentId, entry.getTitle()
                         );
                         
@@ -528,10 +528,10 @@ public class MASTDetector {
                 // Reviewer should only create REVIEW after CODE exists
                 if (agentRole == AgentRole.REVIEWER) {
                     if (!hasPriorEntryForTenant("CODE", tenantId)) {
-                        String evidence = String.format(
+                        String evidence = (
                             "Reviewer agent %s created REVIEW entry '%s' before any CODE entries exist. " +
-                            "Code review requires code to review. " +
-                            "Expected workflow: Implementer creates CODE → Reviewer creates REVIEW.",
+                                "Code review requires code to review. " +
+                                "Expected workflow: Implementer creates CODE → Reviewer creates REVIEW.").formatted(
                             agentId, entry.getTitle()
                         );
                         
@@ -552,10 +552,10 @@ public class MASTDetector {
                 // Tester should only create TEST_RESULT after CODE exists
                 if (agentRole == AgentRole.TESTER) {
                     if (!hasPriorEntryForTenant("CODE", tenantId)) {
-                        String evidence = String.format(
+                        String evidence = (
                             "Tester agent %s created TEST_RESULT entry '%s' before any CODE entries exist. " +
-                            "Testing requires code to test. " +
-                            "Expected workflow: Implementer creates CODE → Tester creates TEST_RESULT.",
+                                "Testing requires code to test. " +
+                                "Expected workflow: Implementer creates CODE → Tester creates TEST_RESULT.").formatted(
                             agentId, entry.getTitle()
                         );
                         
@@ -577,10 +577,10 @@ public class MASTDetector {
                 if (agentRole == AgentRole.PLANNER) {
                     // Check if there's already a TASK_BREAKDOWN from another planner
                     if (hasPriorEntryFromDifferentAgentForTenant("TASK_BREAKDOWN", agentId, tenantId)) {
-                        String evidence = String.format(
+                        String evidence = (
                             "Planner agent %s created duplicate TASK_BREAKDOWN entry '%s' when another planner already created one. " +
-                            "This may indicate lack of coordination in the planning phase. " +
-                            "Multiple task breakdowns should be consolidated.",
+                                "This may indicate lack of coordination in the planning phase. " +
+                                "Multiple task breakdowns should be consolidated.").formatted(
                             agentId, entry.getTitle()
                         );
                         
@@ -605,10 +605,10 @@ public class MASTDetector {
             String roleName = agentRole.toString().substring(0, 1) + 
                             agentRole.toString().substring(1).toLowerCase();
             
-            String evidence = String.format(
+            String evidence = (
                 "Agent %s (role: %s) created entry '%s' before any planning phase (SRS or TASK_BREAKDOWN). " +
-                "%s agents should not start work before planning is complete. " +
-                "Expected workflow: Planner → Implementer → Reviewer → Tester.",
+                    "%s agents should not start work before planning is complete. " +
+                    "Expected workflow: Planner → Implementer → Reviewer → Tester.").formatted(
                 agentId, roleName, entry.getTitle(), roleName
             );
             
@@ -736,11 +736,11 @@ public class MASTDetector {
                 if (currentChoice != null && otherChoice != null && 
                     !currentChoice.equals(otherChoice)) {
                     
-                    String evidence = String.format(
+                    String evidence = (
                         "State inconsistency detected: Agent %s mentions '%s' in '%s', " +
-                        "but agent %s previously mentioned '%s' in '%s'. " +
-                        "Multiple agents have conflicting views of the same state. " +
-                        "This may lead to incompatible implementations.",
+                            "but agent %s previously mentioned '%s' in '%s'. " +
+                            "Multiple agents have conflicting views of the same state. " +
+                            "This may lead to incompatible implementations.").formatted(
                         entry.getAgentId(), currentChoice, entry.getTitle(),
                         other.getAgentId(), otherChoice, other.getTitle()
                     );
@@ -899,9 +899,9 @@ public class MASTDetector {
     }
     
     private void createFormatViolation(BlackboardEntry entry, String reason) {
-        String evidence = String.format(
+        String evidence = (
             "Agent %s produced output with format issues in entry '%s' of type %s. Issue: %s. " +
-            "Content preview: %.200s%s",
+                "Content preview: %.200s%s").formatted(
             entry.getAgentId(),
             entry.getTitle(),
             entry.getEntryType(),
@@ -1198,9 +1198,9 @@ public class MASTDetector {
     }
     
     private void createHallucinationViolation(BlackboardEntry entry, String reason) {
-        String evidence = String.format(
+        String evidence = (
             "Agent %s produced hallucinated content in entry '%s' of type %s. Issue: %s. " +
-            "Content preview: %.200s%s",
+                "Content preview: %.200s%s").formatted(
             entry.getAgentId(),
             entry.getTitle(),
             entry.getEntryType(),
@@ -1291,7 +1291,7 @@ public class MASTDetector {
             // If 3+ "in progress" messages but few deliverables, likely stalled
             if (progressCount >= 3 && deliverableCount < 2) {
                 createTimeoutViolation(entry,
-                    String.format("Agent posted %d 'in progress' updates but only %d deliverables - appears stalled",
+                    "Agent posted %d 'in progress' updates but only %d deliverables - appears stalled".formatted(
                         progressCount, deliverableCount));
                 return;
             }
@@ -1318,7 +1318,7 @@ public class MASTDetector {
             // If >30 minutes between entries, flag as potential timeout
             if (minutesBetween > 30) {
                 createTimeoutViolation(entry,
-                    String.format("Long gap detected: %d minutes since last entry from this agent", 
+                    "Long gap detected: %d minutes since last entry from this agent".formatted(
                         minutesBetween));
                 return;
             }
@@ -1344,9 +1344,9 @@ public class MASTDetector {
     }
     
     private void createTimeoutViolation(BlackboardEntry entry, String reason) {
-        String evidence = String.format(
+        String evidence = (
             "Agent %s appears to have timeout/stalled condition in entry '%s' of type %s. Issue: %s. " +
-            "Content preview: %.200s%s",
+                "Content preview: %.200s%s").formatted(
             entry.getAgentId(),
             entry.getTitle(),
             entry.getEntryType(),
@@ -1555,9 +1555,9 @@ public class MASTDetector {
     }
     
     private void createToolFailureViolation(BlackboardEntry entry, String reason) {
-        String evidence = String.format(
+        String evidence = (
             "Agent %s encountered tool execution failure in entry '%s' of type %s. Issue: %s. " +
-            "Content preview: %.200s%s",
+                "Content preview: %.200s%s").formatted(
             entry.getAgentId(),
             entry.getTitle(),
             entry.getEntryType(),
@@ -1660,9 +1660,9 @@ public class MASTDetector {
         }
 
         if (!foundPatterns.isEmpty()) {
-            String evidence = String.format(
+            String evidence = (
                 "Entry '%s' contains ambiguous language: %s. " +
-                "This may lead to misinterpretation and incorrect implementation.",
+                    "This may lead to misinterpretation and incorrect implementation.").formatted(
                 entry.getTitle(), String.join(", ", foundPatterns)
             );
             
@@ -1693,9 +1693,9 @@ public class MASTDetector {
         int coverage = parseCoverage(content);
         
         if (coverage >= 0 && coverage < 80) {
-            String evidence = String.format(
+            String evidence = (
                 "Test coverage for '%s' is %d%%, below 80%% threshold. " +
-                "Insufficient test coverage increases risk of bugs.",
+                    "Insufficient test coverage increases risk of bugs.").formatted(
                 entry.getTitle(), coverage
             );
             
@@ -1739,9 +1739,9 @@ public class MASTDetector {
             double similarity = calculateTitleSimilarity(entry.getTitle(), other.getTitle());
             
             if (similarity > 0.7) { // 70% similarity threshold
-                String evidence = String.format(
+                String evidence = (
                     "Agent %s is working on '%s' which is %.0f%% similar to '%s' by agent %s. " +
-                    "This indicates potential duplicate work.",
+                        "This indicates potential duplicate work.").formatted(
                     entry.getAgentId(), entry.getTitle(),
                     similarity * 100,
                     other.getTitle(), other.getAgentId()
@@ -1774,9 +1774,9 @@ public class MASTDetector {
 
         // Schedule check for 30 minutes later (in real implementation, use scheduled task)
         // For now, just create a violation immediately
-        String evidence = String.format(
+        String evidence = (
             "Code review '%s' marked as REQUIRES_CHANGES. " +
-            "Monitoring for follow-up action from original author.",
+                "Monitoring for follow-up action from original author.").formatted(
             review.getTitle()
         );
         

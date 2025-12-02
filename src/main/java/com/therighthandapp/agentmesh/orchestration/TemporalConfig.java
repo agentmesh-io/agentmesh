@@ -30,7 +30,7 @@ public class TemporalConfig {
     private String taskQueue;
 
     @Bean
-    public WorkflowServiceStubs workflowServiceStubs() {
+    WorkflowServiceStubs workflowServiceStubs() {
         if (!temporalEnabled) {
             log.info("Temporal is disabled. Orchestration will run in mock mode.");
             return null;
@@ -51,7 +51,7 @@ public class TemporalConfig {
     }
 
     @Bean
-    public WorkflowClient workflowClient(WorkflowServiceStubs serviceStubs) {
+    WorkflowClient workflowClient(WorkflowServiceStubs serviceStubs) {
         if (serviceStubs == null) {
             return null;
         }
@@ -63,7 +63,7 @@ public class TemporalConfig {
     }
 
     @Bean
-    public WorkerFactory workerFactory(WorkflowClient workflowClient, AgentActivityImpl activityImpl) {
+    WorkerFactory workerFactory(WorkflowClient workflowClient, AgentActivityImpl activityImpl) {
         if (workflowClient == null) {
             log.info("Temporal worker not started (Temporal disabled)");
             return null;

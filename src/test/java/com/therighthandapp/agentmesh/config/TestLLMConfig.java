@@ -17,7 +17,7 @@ public class TestLLMConfig {
 
     @Bean
     @Primary
-    public LLMClient llmClient() {
+    LLMClient llmClient() {
         return new MockLLMClient();
     }
 }

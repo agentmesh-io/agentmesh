@@ -226,8 +226,7 @@ management:
         include: health,info,prometheus,metrics,beans,mappings
 
   metrics:
-    export:
-      prometheus:
-        enabled: true
     tags:
       application: ${spring.application.name}
+
+  prometheus.metrics.export.enabled: true

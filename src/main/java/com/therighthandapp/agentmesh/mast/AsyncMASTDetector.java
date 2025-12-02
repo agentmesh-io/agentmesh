@@ -3,7 +3,6 @@ package com.therighthandapp.agentmesh.mast;
 import com.therighthandapp.agentmesh.blackboard.BlackboardEntry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -38,7 +37,6 @@ public class AsyncMASTDetector {
     private final MASTDetector detector;
     private final MASTViolationService violationService;
 
-    @Autowired
     public AsyncMASTDetector(MASTDetector detector, MASTViolationService violationService) {
         this.detector = detector;
         this.violationService = violationService;

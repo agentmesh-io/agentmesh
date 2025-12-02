@@ -18,8 +18,7 @@ public class AccessControlService {
         TenantContext context = TenantContext.get();
 
         if (!tenantId.equals(context.getTenantId())) {
-            throw new SecurityException(String.format(
-                "Access denied: User %s attempting to access tenant %s but authenticated for tenant %s",
+            throw new SecurityException("Access denied: User %s attempting to access tenant %s but authenticated for tenant %s".formatted(
                 context.getUserId(), tenantId, context.getTenantId()
             ));
         }
@@ -36,8 +35,7 @@ public class AccessControlService {
 
         // Then check project boundary
         if (!projectId.equals(context.getProjectId())) {
-            throw new SecurityException(String.format(
-                "Access denied: User %s attempting to access project %s but authenticated for project %s",
+            throw new SecurityException("Access denied: User %s attempting to access project %s but authenticated for project %s".formatted(
                 context.getUserId(), projectId, context.getProjectId()
             ));
         }
@@ -50,8 +48,7 @@ public class AccessControlService {
         TenantContext context = TenantContext.get();
 
         if (!context.hasRole(requiredRole)) {
-            throw new SecurityException(String.format(
-                "Access denied: User %s lacks required role '%s'",
+            throw new SecurityException("Access denied: User %s lacks required role '%s'".formatted(
                 context.getUserId(), requiredRole
             ));
         }
@@ -64,8 +61,7 @@ public class AccessControlService {
         TenantContext context = TenantContext.get();
 
         if (!context.hasAnyRole(requiredRoles)) {
-            throw new SecurityException(String.format(
-                "Access denied: User %s lacks any of required roles: %s",
+            throw new SecurityException("Access denied: User %s lacks any of required roles: %s".formatted(
                 context.getUserId(), String.join(", ", requiredRoles)
             ));
         }
@@ -98,8 +94,7 @@ public class AccessControlService {
 
         // Layer 4: ABAC - Dynamic Attributes
         if (!context.meetsSecurityRequirements()) {
-            throw new SecurityException(String.format(
-                "Access denied: User %s fails ABAC security requirements (MFA: %s, Locked: %s)",
+            throw new SecurityException("Access denied: User %s fails ABAC security requirements (MFA: %s, Locked: %s)".formatted(
                 context.getUserId(), context.isMfaEnabled(), context.isAccountLocked()
             ));
         }
@@ -117,8 +112,7 @@ public class AccessControlService {
 
         // Ensure target resource belongs to current tenant
         if (targetResource != null && !targetResource.startsWith(context.getDataPartitionKey())) {
-            throw new SecurityException(String.format(
-                "Access denied: Tool %s attempting to access resource outside tenant partition: %s",
+            throw new SecurityException("Access denied: Tool %s attempting to access resource outside tenant partition: %s".formatted(
                 toolName, targetResource
             ));
         }

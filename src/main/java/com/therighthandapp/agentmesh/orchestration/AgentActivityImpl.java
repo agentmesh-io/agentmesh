@@ -199,7 +199,7 @@ public class AgentActivityImpl implements AgentActivity {
     }
 
     private String buildPlannerPrompt(String srsContent) {
-        return String.format("""
+        return """
                 You are an expert software architect. Given the following Software Requirements Specification (SRS),
                 create a detailed implementation plan with:
                 1. Task breakdown
@@ -211,7 +211,7 @@ public class AgentActivityImpl implements AgentActivity {
                 %s
                 
                 Provide a structured plan that can be executed by a development team.
-                """, srsContent);
+                """.formatted(srsContent);
     }
 }
 

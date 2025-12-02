@@ -177,9 +177,11 @@ public class MockLLMClient implements LLMClient {
     private String generateMockCode(String userMessage) {
         // Check for hello world request
         if (userMessage.toLowerCase().contains("hello")) {
-            return "public void helloWorld() {\n" +
-                   "    System.out.println(\"Hello, World!\");\n" +
-                   "}";
+            return """
+                   public void helloWorld() {
+                       System.out.println("Hello, World!");
+                   }\
+                   """;
         }
         
         return "public class MockGeneratedCode {\n" +
@@ -199,78 +201,89 @@ public class MockLLMClient implements LLMClient {
     }
     
     private String generateMockReview(String userMessage) {
-        return "# Code Review Report\n\n" +
-               "## Status: APPROVED\n\n" +
-               "## Issues Found: 2\n\n" +
-               "### Issue 1: Missing null checks\n" +
-               "- Severity: MEDIUM\n" +
-               "- Location: Line 15\n" +
-               "- Recommendation: Add null validation\n\n" +
-               "### Issue 2: Optimize database queries\n" +
-               "- Severity: LOW\n" +
-               "- Location: Line 42\n" +
-               "- Recommendation: Use batch operations\n\n" +
-               "## Score: 8/10\n" +
-               "Overall code quality is good with minor improvements needed.";
+        return """
+               # Code Review Report
+               
+               ## Status: APPROVED
+               
+               ## Issues Found: 2
+               
+               ### Issue 1: Missing null checks
+               - Severity: MEDIUM
+               - Location: Line 15
+               - Recommendation: Add null validation
+               
+               ### Issue 2: Optimize database queries
+               - Severity: LOW
+               - Location: Line 42
+               - Recommendation: Use batch operations
+               
+               ## Score: 8/10
+               Overall code quality is good with minor improvements needed.""";
     }
     
     private String generateMockTestCode(String userMessage) {
-        return "@Test\n" +
-               "public void testCrudOperations() {\n" +
-               "    // Arrange\n" +
-               "    Entity entity = new Entity();\n" +
-               "    entity.setId(1L);\n" +
-               "    entity.setName(\"Test\");\n" +
-               "    \n" +
-               "    // Act\n" +
-               "    repository.save(entity);\n" +
-               "    Entity result = repository.findById(1L).get();\n" +
-               "    \n" +
-               "    // Assert\n" +
-               "    assertNotNull(result);\n" +
-               "    assertEquals(\"Test\", result.getName());\n" +
-               "    \n" +
-               "    // Update test\n" +
-               "    result.setName(\"Updated\");\n" +
-               "    repository.save(result);\n" +
-               "    Entity updated = repository.findById(1L).get();\n" +
-               "    assertEquals(\"Updated\", updated.getName());\n" +
-               "    \n" +
-               "    // Delete test\n" +
-               "    repository.deleteById(1L);\n" +
-               "    assertFalse(repository.findById(1L).isPresent());\n" +
-               "}\n\n" +
-               "@Test\n" +
-               "public void testValidation() {\n" +
-               "    // Test input validation\n" +
-               "    Entity invalid = new Entity();\n" +
-               "    assertThrows(ValidationException.class, () -> {\n" +
-               "        repository.save(invalid);\n" +
-               "    });\n" +
-               "}\n\n" +
-               "@Test\n" +
-               "public void testErrorHandling() {\n" +
-               "    // Test error scenarios\n" +
-               "    assertThrows(NotFoundException.class, () -> {\n" +
-               "        repository.findById(999L).orElseThrow();\n" +
-               "    });\n" +
-               "}\n\n" +
-               "@Test\n" +
-               "public void testConcurrency() {\n" +
-               "    // Test concurrent access\n" +
-               "    Entity entity = new Entity();\n" +
-               "    entity.setId(2L);\n" +
-               "    repository.save(entity);\n" +
-               "    \n" +
-               "    CountDownLatch latch = new CountDownLatch(10);\n" +
-               "    for (int i = 0; i < 10; i++) {\n" +
-               "        new Thread(() -> {\n" +
-               "            repository.findById(2L);\n" +
-               "            latch.countDown();\n" +
-               "        }).start();\n" +
-               "    }\n" +
-               "    latch.await();\n" +
-               "}";
+        return """
+               @Test
+               public void testCrudOperations() {
+                   // Arrange
+                   Entity entity = new Entity();
+                   entity.setId(1L);
+                   entity.setName("Test");
+                  \s
+                   // Act
+                   repository.save(entity);
+                   Entity result = repository.findById(1L).get();
+                  \s
+                   // Assert
+                   assertNotNull(result);
+                   assertEquals("Test", result.getName());
+                  \s
+                   // Update test
+                   result.setName("Updated");
+                   repository.save(result);
+                   Entity updated = repository.findById(1L).get();
+                   assertEquals("Updated", updated.getName());
+                  \s
+                   // Delete test
+                   repository.deleteById(1L);
+                   assertFalse(repository.findById(1L).isPresent());
+               }
+               
+               @Test
+               public void testValidation() {
+                   // Test input validation
+                   Entity invalid = new Entity();
+                   assertThrows(ValidationException.class, () -> {
+                       repository.save(invalid);
+                   });
+               }
+               
+               @Test
+               public void testErrorHandling() {
+                   // Test error scenarios
+                   assertThrows(NotFoundException.class, () -> {
+                       repository.findById(999L).orElseThrow();
+                   });
+               }
+               
+               @Test
+               public void testConcurrency() {
+                   // Test concurrent access
+                   Entity entity = new Entity();
+                   entity.setId(2L);
+                   repository.save(entity);
+                  \s
+                   CountDownLatch latch = new CountDownLatch(10);
+                   for (int i = 0; i < 10; i++) {
+                       new Thread(() -> {
+                           repository.findById(2L);
+                           latch.countDown();
+                       }).start();
+                   }
+                   latch.await();
+               }\
+               """;
     }
 
     // Test utility methods

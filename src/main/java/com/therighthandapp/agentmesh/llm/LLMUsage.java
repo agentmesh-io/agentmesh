@@ -34,8 +34,8 @@ public class LLMUsage {
 
     @Override
     public String toString() {
-        return String.format("Usage{prompt=%d, completion=%d, total=%d, cost=$%.4f}",
-                promptTokens, completionTokens, totalTokens, estimatedCost);
+        return "Usage{prompt=%d, completion=%d, total=%d, cost=$%.4f}".formatted(
+            promptTokens, completionTokens, totalTokens, estimatedCost);
     }
 }
 

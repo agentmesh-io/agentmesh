@@ -28,7 +28,7 @@ public class RedisConfig {
      * Configure Redis template for custom operations
      */
     @Bean
-    public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory connectionFactory) {
+    RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory connectionFactory) {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
         
@@ -49,7 +49,7 @@ public class RedisConfig {
      * Configure cache manager with different TTLs for different cache types
      */
     @Bean
-    public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory) {
+    RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory) {
         // Default configuration - 1 hour TTL
         RedisCacheConfiguration defaultConfig = RedisCacheConfiguration.defaultCacheConfig()
             .entryTtl(Duration.ofHours(1))

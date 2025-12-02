@@ -34,7 +34,7 @@ public class TokenUsageSummary {
 
     @Override
     public String toString() {
-        return String.format("TokenUsageSummary{tenant=%s, project=%s, tokens=%d, cost=$%.2f, period=%s to %s}",
+        return "TokenUsageSummary{tenant=%s, project=%s, tokens=%d, cost=$%.2f, period=%s to %s}".formatted(
             tenantId, projectId, totalTokens, totalCost, periodStart, periodEnd);
     }
 }

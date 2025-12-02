@@ -189,8 +189,7 @@ public class TenantService {
         // Check tenant project limit
         long currentProjects = projectRepository.countByTenantId(tenantId);
         if (currentProjects >= tenant.getMaxProjects()) {
-            throw new IllegalStateException(String.format(
-                "Tenant %s has reached maximum project limit: %d",
+            throw new IllegalStateException("Tenant %s has reached maximum project limit: %d".formatted(
                 tenantId, tenant.getMaxProjects()
             ));
         }

@@ -50,7 +50,7 @@ public class WebConfig implements WebMvcConfigurer {
      * This provides more granular control if needed
      */
     @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
+    CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         
         configuration.setAllowedOrigins(Arrays.asList(

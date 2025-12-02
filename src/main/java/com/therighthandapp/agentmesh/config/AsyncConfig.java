@@ -37,7 +37,7 @@ public class AsyncConfig {
      * @return Configured executor for @Async("mastExecutor") tasks
      */
     @Bean(name = "mastExecutor")
-    public Executor mastExecutor() {
+    Executor mastExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         
         // Core pool size - always active threads

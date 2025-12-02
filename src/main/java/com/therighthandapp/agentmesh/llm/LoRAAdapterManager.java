@@ -151,7 +151,7 @@ public class LoRAAdapterManager {
      * Generate unique adapter ID
      */
     private String generateAdapterId(String tenantId, String adapterPath) {
-        return String.format("lora-%s-%d", tenantId, adapterPath.hashCode());
+        return "lora-%s-%d".formatted(tenantId, adapterPath.hashCode());
     }
 
     /**

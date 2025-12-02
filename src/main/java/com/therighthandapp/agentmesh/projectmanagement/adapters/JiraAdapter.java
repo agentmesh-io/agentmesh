@@ -77,7 +77,7 @@ public class JiraAdapter implements ProjectManagementProvider {
         log.info("Adding completion metrics to Jira issue {}", itemId);
 
         // Add comment with metrics
-        String comment = String.format("""
+        String comment = """
             🤖 *AgentMesh Completion Report*
             
             *Status:* %s
@@ -85,12 +85,12 @@ public class JiraAdapter implements ProjectManagementProvider {
             *Timestamp:* %s
             
             %s
-            """,
+            """.formatted(
             success ? "✅ Success" : "❌ Failed",
             iterations,
             java.time.Instant.now(),
             success ? "Code generated successfully and ready for review." :
-                     "*Failure Reason:* " + failureReason
+                "*Failure Reason:* " + failureReason
         );
 
         addComment(itemId, comment);
@@ -100,7 +100,7 @@ public class JiraAdapter implements ProjectManagementProvider {
     public ProjectItem getProjectItem(String itemId) {
         log.info("Getting Jira issue {}", itemId);
 
-        String url = String.format("%s/rest/api/3/issue/%s", jiraUrl, itemId);
+        String url = "%s/rest/api/3/issue/%s".formatted(jiraUrl, itemId);
 
         ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET,
             new HttpEntity<>(getHeaders()), Map.class);
@@ -129,8 +129,8 @@ public class JiraAdapter implements ProjectManagementProvider {
     public List<ProjectItem> getProjectItemsByStatus(String status) {
         log.info("Querying Jira issues with status {}", status);
 
-        String jql = String.format("project = %s AND status = '%s'", projectKey, status);
-        String url = String.format("%s/rest/api/3/search?jql=%s", jiraUrl, jql);
+        String jql = "project = %s AND status = '%s'".formatted(projectKey, status);
+        String url = "%s/rest/api/3/search?jql=%s".formatted(jiraUrl, jql);
 
         ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET,
             new HttpEntity<>(getHeaders()), Map.class);
@@ -163,7 +163,7 @@ public class JiraAdapter implements ProjectManagementProvider {
 
     private void transitionIssue(String issueKey, String status) {
         // Get available transitions
-        String transitionsUrl = String.format("%s/rest/api/3/issue/%s/transitions",
+        String transitionsUrl = "%s/rest/api/3/issue/%s/transitions".formatted(
             jiraUrl, issueKey);
 
         ResponseEntity<Map> transitionsResponse = restTemplate.exchange(transitionsUrl,
@@ -192,7 +192,7 @@ public class JiraAdapter implements ProjectManagementProvider {
     }
 
     private void updateCustomFields(String issueKey, Map<String, Object> customFields) {
-        String url = String.format("%s/rest/api/3/issue/%s", jiraUrl, issueKey);
+        String url = "%s/rest/api/3/issue/%s".formatted(jiraUrl, issueKey);
 
         Map<String, Object> body = Map.of("fields", customFields);
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, getHeaders());
@@ -201,7 +201,7 @@ public class JiraAdapter implements ProjectManagementProvider {
     }
 
     private void addComment(String issueKey, String comment) {
-        String url = String.format("%s/rest/api/3/issue/%s/comment", jiraUrl, issueKey);
+        String url = "%s/rest/api/3/issue/%s/comment".formatted(jiraUrl, issueKey);
 
         Map<String, Object> body = Map.of(
             "body", Map.of(

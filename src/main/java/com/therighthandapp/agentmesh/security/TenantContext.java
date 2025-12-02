@@ -187,7 +187,7 @@ public class TenantContext {
 
     @Override
     public String toString() {
-        return String.format("TenantContext{tenantId='%s', projectId='%s', userId='%s', org='%s'}",
+        return "TenantContext{tenantId='%s', projectId='%s', userId='%s', org='%s'}".formatted(
             tenantId, projectId, userId, organizationId);
     }
 }
