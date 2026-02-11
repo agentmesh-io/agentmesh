@@ -197,7 +197,7 @@ CREATE INDEX idx_token_model ON token_usage_records(model);
 -- VIEWS FOR ANALYTICS
 -- ============================================================================
 
--- Tenant usage summary
+-- Tenant usage summary (H2 compatible syntax)
 CREATE VIEW v_tenant_usage AS
 SELECT 
     t.id AS tenant_id,

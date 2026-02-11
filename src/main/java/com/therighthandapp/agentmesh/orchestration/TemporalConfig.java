@@ -7,11 +7,13 @@ import io.temporal.worker.WorkerFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Configuration for Temporal workflow engine integration
+ * Configuration for Temporal workflow engine integration.
+ * All beans are conditional on agentmesh.temporal.enabled=true
  */
 @Configuration
 public class TemporalConfig {
@@ -30,12 +32,8 @@ public class TemporalConfig {
     private String taskQueue;
 
     @Bean
+    @ConditionalOnProperty(name = "agentmesh.temporal.enabled", havingValue = "true")
     WorkflowServiceStubs workflowServiceStubs() {
-        if (!temporalEnabled) {
-            log.info("Temporal is disabled. Orchestration will run in mock mode.");
-            return null;
-        }
-
         try {
             WorkflowServiceStubs service = WorkflowServiceStubs.newServiceStubs(
                     io.temporal.serviceclient.WorkflowServiceStubsOptions.newBuilder()
@@ -51,6 +49,7 @@ public class TemporalConfig {
     }
 
     @Bean
+    @ConditionalOnProperty(name = "agentmesh.temporal.enabled", havingValue = "true")
     WorkflowClient workflowClient(WorkflowServiceStubs serviceStubs) {
         if (serviceStubs == null) {
             return null;
@@ -63,6 +62,7 @@ public class TemporalConfig {
     }
 
     @Bean
+    @ConditionalOnProperty(name = "agentmesh.temporal.enabled", havingValue = "true")
     WorkerFactory workerFactory(WorkflowClient workflowClient, AgentActivityImpl activityImpl) {
         if (workflowClient == null) {
             log.info("Temporal worker not started (Temporal disabled)");

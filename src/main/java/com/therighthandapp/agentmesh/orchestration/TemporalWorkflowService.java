@@ -50,8 +50,10 @@ public class TemporalWorkflowService {
             // Generate workflow ID based on project
             String workflowId = "sdlc-" + projectKey + "-" + System.currentTimeMillis();
 
-            // Prepare feature request from SRS data
-            String featureRequest = prepareFeatureRequest(srsData);
+            // Pass the SRS ID instead of the full content
+            // The PlannerAgentService will retrieve the full SRS from Auto-BADS using this ID
+            String srsId = srsData.getIdeaId().toString();
+            log.info("Passing SRS ID to workflow: {}", srsId);
 
             // Configure workflow options
             WorkflowOptions options = WorkflowOptions.newBuilder()
@@ -62,11 +64,12 @@ public class TemporalWorkflowService {
             // Create workflow stub
             SdlcWorkflow workflow = workflowClient.newWorkflowStub(SdlcWorkflow.class, options);
 
-            // Start workflow asynchronously
+            // Start workflow asynchronously with SRS ID
             WorkflowStub workflowStub = WorkflowStub.fromTyped(workflow);
-            workflowStub.start(featureRequest);
+            workflowStub.start(srsId);
 
-            log.info("Successfully started SDLC workflow: workflowId={}, projectKey={}", workflowId, projectKey);
+            log.info("Successfully started SDLC workflow: workflowId={}, projectKey={}, srsId={}", 
+                     workflowId, projectKey, srsId);
             return workflowId;
 
         } catch (Exception e) {

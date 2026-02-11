@@ -17,7 +17,19 @@ public interface AgentActivity {
     String executePlanning(String srsContent);
 
     /**
-     * Execute a code generation task
+     * Execute architecture design task
+     */
+    @ActivityMethod
+    String executeArchitecture(String planId);
+
+    /**
+     * Execute code generation task with clean architecture
+     */
+    @ActivityMethod
+    String executeDevelopment(String planId, String architectureId);
+
+    /**
+     * Execute a code generation task (legacy)
      */
     @ActivityMethod
     String executeCodeGeneration(String planId, String taskDescription);

@@ -42,10 +42,7 @@ public class WorkflowController {
             // Generate workflow ID
             String workflowId = UUID.randomUUID().toString();
             
-            // Start planning phase
-            String planId = agentActivity.executePlanning(srsContent);
-            
-            // Create workflow record
+            // Create workflow record first
             Map<String, Object> workflow = new HashMap<>();
             workflow.put("id", workflowId);
             workflow.put("projectName", projectName);
@@ -53,20 +50,13 @@ public class WorkflowController {
             workflow.put("currentPhase", "PLANNING");
             workflow.put("startedAt", Instant.now().toString());
             workflow.put("lastUpdatedAt", Instant.now().toString());
-            workflow.put("planId", planId);
             workflow.put("progress", 10);
             workflow.put("phases", createPhases());
             
             workflows.put(workflowId, workflow);
             
-            // Broadcast workflow start via WebSocket
-            webSocketHandler.broadcastWorkflowUpdate(
-                workflowId, 
-                "RUNNING", 
-                "PLANNING", 
-                10, 
-                "Workflow started - Planning phase initialized"
-            );
+            // Execute workflow asynchronously
+            executeWorkflowAsync(workflowId, srsContent);
             
             log.info("Workflow {} started successfully", workflowId);
             return ResponseEntity.ok(workflow);
@@ -76,6 +66,116 @@ public class WorkflowController {
             return ResponseEntity.internalServerError()
                 .body(Map.of("error", e.getMessage()));
         }
+    }
+    
+    private void executeWorkflowAsync(String workflowId, String srsContent) {
+        new Thread(() -> {
+            try {
+                Map<String, Object> workflow = workflows.get(workflowId);
+                if (workflow == null) return;
+                
+                // Phase 1: Planning
+                log.info("Workflow {}: Starting PLANNING phase", workflowId);
+                updatePhase(workflowId, "PLANNING", "RUNNING", 50);
+                String planId = agentActivity.executePlanning(srsContent);
+                workflow.put("planId", planId);
+                updatePhase(workflowId, "PLANNING", "COMPLETED", 100);
+                workflow.put("progress", 15);
+                Thread.sleep(2000);
+                
+                // Phase 2: Architecture
+                log.info("Workflow {}: Starting ARCHITECTURE phase", workflowId);
+                workflow.put("currentPhase", "ARCHITECTURE");
+                updatePhase(workflowId, "ARCHITECTURE", "RUNNING", 50);
+                String architectureId = agentActivity.executeArchitecture(planId);
+                workflow.put("architectureId", architectureId);
+                updatePhase(workflowId, "ARCHITECTURE", "COMPLETED", 100);
+                workflow.put("progress", 30);
+                Thread.sleep(2000);
+                
+                // Phase 3: Code Generation
+                log.info("Workflow {}: Starting CODE_GENERATION phase", workflowId);
+                workflow.put("currentPhase", "CODE_GENERATION");
+                updatePhase(workflowId, "CODE_GENERATION", "RUNNING", 50);
+                String codeId = agentActivity.executeCodeGeneration(planId, architectureId);
+                workflow.put("codeId", codeId);
+                updatePhase(workflowId, "CODE_GENERATION", "COMPLETED", 100);
+                workflow.put("progress", 50);
+                Thread.sleep(2000);
+                
+                // Phase 4: Testing
+                log.info("Workflow {}: Starting TESTING phase", workflowId);
+                workflow.put("currentPhase", "TESTING");
+                updatePhase(workflowId, "TESTING", "RUNNING", 50);
+                String testId = agentActivity.executeTestGeneration(codeId);
+                workflow.put("testId", testId);
+                updatePhase(workflowId, "TESTING", "COMPLETED", 100);
+                workflow.put("progress", 70);
+                Thread.sleep(2000);
+                
+                // Phase 5: Review
+                log.info("Workflow {}: Starting REVIEW phase", workflowId);
+                workflow.put("currentPhase", "REVIEW");
+                updatePhase(workflowId, "REVIEW", "RUNNING", 50);
+                String reviewId = agentActivity.executeCodeReview(codeId);
+                workflow.put("reviewId", reviewId);
+                updatePhase(workflowId, "REVIEW", "COMPLETED", 100);
+                workflow.put("progress", 90);
+                Thread.sleep(2000);
+                
+                // Phase 6: Complete
+                log.info("Workflow {}: Workflow COMPLETED", workflowId);
+                workflow.put("currentPhase", "DEPLOYMENT");
+                workflow.put("status", "COMPLETED");
+                workflow.put("progress", 100);
+                updatePhase(workflowId, "DEPLOYMENT", "COMPLETED", 100);
+                
+                webSocketHandler.broadcastWorkflowUpdate(
+                    workflowId, 
+                    "COMPLETED", 
+                    "DEPLOYMENT", 
+                    100, 
+                    "Workflow completed successfully"
+                );
+                
+            } catch (Exception e) {
+                log.error("Workflow {} failed: {}", workflowId, e.getMessage(), e);
+                Map<String, Object> workflow = workflows.get(workflowId);
+                if (workflow != null) {
+                    workflow.put("status", "FAILED");
+                    workflow.put("error", e.getMessage());
+                }
+            }
+        }).start();
+    }
+    
+    private void updatePhase(String workflowId, String phaseName, String status, int progress) {
+        Map<String, Object> workflow = workflows.get(workflowId);
+        if (workflow == null) return;
+        
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> phases = (List<Map<String, Object>>) workflow.get("phases");
+        for (int i = 0; i < phases.size(); i++) {
+            Map<String, Object> phase = phases.get(i);
+            if (phaseName.equals(phase.get("name"))) {
+                // Create a mutable copy
+                Map<String, Object> updatedPhase = new HashMap<>(phase);
+                updatedPhase.put("status", status);
+                updatedPhase.put("progress", progress);
+                phases.set(i, updatedPhase);
+                break;
+            }
+        }
+        
+        workflow.put("lastUpdatedAt", Instant.now().toString());
+        
+        webSocketHandler.broadcastWorkflowUpdate(
+            workflowId,
+            (String) workflow.get("status"),
+            (String) workflow.get("currentPhase"),
+            (Integer) workflow.get("progress"),
+            phaseName + " phase " + status.toLowerCase()
+        );
     }
 
     /**
@@ -206,14 +306,15 @@ public class WorkflowController {
     }
 
     private List<Map<String, Object>> createPhases() {
-        return List.of(
-            Map.of("name", "PLANNING", "status", "RUNNING", "progress", 100),
-            Map.of("name", "CODE_GENERATION", "status", "PENDING", "progress", 0),
-            Map.of("name", "TESTING", "status", "PENDING", "progress", 0),
-            Map.of("name", "REVIEW", "status", "PENDING", "progress", 0),
-            Map.of("name", "DEBUGGING", "status", "PENDING", "progress", 0),
-            Map.of("name", "DEPLOYMENT", "status", "PENDING", "progress", 0)
-        );
+        return new ArrayList<>(List.of(
+            new HashMap<>(Map.of("name", "PLANNING", "status", "RUNNING", "progress", 100)),
+            new HashMap<>(Map.of("name", "ARCHITECTURE", "status", "PENDING", "progress", 0)),
+            new HashMap<>(Map.of("name", "CODE_GENERATION", "status", "PENDING", "progress", 0)),
+            new HashMap<>(Map.of("name", "TESTING", "status", "PENDING", "progress", 0)),
+            new HashMap<>(Map.of("name", "REVIEW", "status", "PENDING", "progress", 0)),
+            new HashMap<>(Map.of("name", "DEBUGGING", "status", "PENDING", "progress", 0)),
+            new HashMap<>(Map.of("name", "DEPLOYMENT", "status", "PENDING", "progress", 0))
+        ));
     }
 
     private List<Map<String, Object>> createGraphNodes() {
