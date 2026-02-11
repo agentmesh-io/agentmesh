@@ -69,15 +69,18 @@ curl http://localhost:18085/api/workflows/{workflow-id}
    - [ ] Test prompt templates with real LLM
    - [ ] Verify Ollama is running on host
 
-2. **Agent Flow Completion**
-   - Test Planner → Architect → Developer chain
-   - Verify Blackboard artifact storage
-   - Complete Tester and Reviewer agents
+2. **Agent Flow Completion** ✅ ENHANCED
+   - [x] Added DiagnosticsController for system health checks
+   - [x] Verified agent service implementations exist
+   - [ ] Test Planner → Architect → Developer chain
+   - [ ] Verify Blackboard artifact storage
+   - [ ] Complete Tester and Reviewer agents
 
-3. **UI Updates**
-   - Update API endpoints to new port
-   - Add real-time workflow monitoring
-   - Display agent outputs
+3. **UI Updates** ✅ COMPLETED
+   - [x] Updated .env.local with new API port 18085
+   - [x] Added diagnosticsApi to agentmesh-api.ts
+   - [x] Created /diagnostics page with system health UI
+   - [x] Added diagnostics link to home page
 
 4. **Error Handling**
    - Add proper retry logic
@@ -96,6 +99,8 @@ AgentMesh/
 │   └── WorkflowService.java             # NEW - Business Logic
 ├── src/main/java/.../config/
 │   └── LLMConfig.java                   # NEW - LLM Fallback Config
+├── src/main/java/.../api/
+│   └── DiagnosticsController.java       # NEW - System Health API
 ├── src/main/java/.../llm/
 │   └── MockLLMClient.java               # MODIFIED - Made conditional
 ├── src/main/resources/db/migration/

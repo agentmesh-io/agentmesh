@@ -2,7 +2,7 @@ package com.therighthandapp.agentmesh.llm;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.annotation.Primary;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -11,9 +11,15 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Mock LLM implementation for deterministic testing.
  * Records calls and returns pre-configured responses.
+ *
+ * Only active when both ollama and openai are disabled.
  */
 @Component
-@Primary
+@ConditionalOnProperty(
+    name = {"agentmesh.llm.ollama.enabled", "agentmesh.llm.openai.enabled"},
+    havingValue = "false",
+    matchIfMissing = true
+)
 public class MockLLMClient implements LLMClient {
     private static final Logger log = LoggerFactory.getLogger(MockLLMClient.class);
 
