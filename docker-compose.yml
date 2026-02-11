@@ -189,7 +189,10 @@ services:
       # Operator
       AGENTMESH_OPERATOR_ENABLED: 'false'
 
-      # LLM Configuration
+      # LLM Configuration - Ollama (connects to host machine)
+      AGENTMESH_LLM_OLLAMA_ENABLED: 'true'
+      AGENTMESH_LLM_OLLAMA_BASE_URL: 'http://host.docker.internal:11434'
+      AGENTMESH_LLM_OLLAMA_MODEL: 'codellama:latest'
       AGENTMESH_LLM_OPENAI_ENABLED: 'false'
       AGENTMESH_LLM_LORA_ENABLED: 'false'
 
