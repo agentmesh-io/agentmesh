@@ -33,4 +33,18 @@
         <appender-ref ref="CONSOLE" />
         <appender-ref ref="FILE" />
     </root>
+
+    <!-- Production profile: JSON structured logging for ELK/Loki -->
+    <springProfile name="prod">
+        <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>${JSON_PATTERN}</pattern>
+            </encoder>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="JSON_CONSOLE" />
+            <appender-ref ref="FILE" />
+        </root>
+    </springProfile>
 </configuration>
