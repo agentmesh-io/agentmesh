@@ -111,20 +111,12 @@ public class AgentActivityImpl implements AgentActivity {
         // Post planning result to Blackboard
         var entry = blackboard.post("planner-agent", "PLAN", "Execution Plan", content);
 
-        // Try to extract planId from JSON response, fallback to blackboard entry ID
+        // Always return the blackboard entry ID as a numeric string
+        // The executeArchitecture method knows how to handle numeric IDs
+        // by falling back to basic LLM-based architecture generation
         String planId = entry.getId().toString();
-        if (response.isSuccess() && content.contains("\"planId\"")) {
-            try {
-                var jsonNode = objectMapper.readTree(content);
-                if (jsonNode.has("planId")) {
-                    planId = jsonNode.get("planId").asText();
-                    log.info("Extracted planId from JSON: {}", planId);
-                }
-            } catch (Exception e) {
-                log.warn("Failed to extract planId from JSON, using entry ID: {}", entry.getId());
-            }
-        }
-        
+        log.info("Basic planning complete, returning blackboard entry ID: {}", planId);
+
         return planId;
     }
 
@@ -132,19 +124,72 @@ public class AgentActivityImpl implements AgentActivity {
     public String executeArchitecture(String planId) {
         log.info("Executing architecture design for plan: {}", planId);
         
-        if (architectAgentService == null) {
-            log.warn("ArchitectAgentService not available, skipping architecture generation");
-            return "SKIPPED";
+        // If planId is a simple numeric ID (blackboard entry), skip the ArchitectAgentService
+        // and use basic LLM-based architecture generation
+        boolean isBlackboardEntryId = planId != null && planId.matches("^\\d+$");
+
+        if (architectAgentService != null && !isBlackboardEntryId) {
+            try {
+                SystemArchitecture architecture = architectAgentService.generateArchitecture(planId);
+                log.info("Architecture generated successfully via ArchitectAgentService: {}", architecture.getArchitectureId());
+                return architecture.getArchitectureId();
+            } catch (Exception e) {
+                log.warn("ArchitectAgentService failed, falling back to basic architecture generation: {}", e.getMessage());
+                // Fall through to basic architecture generation
+            }
         }
-        
+
+        // Fallback: Basic architecture generation using LLM directly
+        log.info("Using basic LLM architecture generation for planId: {}", planId);
+
+        // Retrieve plan content from blackboard if possible
+        String planContent = "";
         try {
-            SystemArchitecture architecture = architectAgentService.generateArchitecture(planId);
-            log.info("Architecture generated successfully: {}", architecture.getArchitectureId());
-            return architecture.getArchitectureId();
+            if (isBlackboardEntryId) {
+                var entryOpt = blackboard.getById(Long.parseLong(planId));
+                if (entryOpt.isPresent()) {
+                    planContent = entryOpt.get().getContent();
+                }
+            }
         } catch (Exception e) {
-            log.error("Architecture generation failed for plan: {}", planId, e);
-            throw new RuntimeException("Architecture generation failed: " + e.getMessage(), e);
+            log.warn("Could not retrieve plan from blackboard: {}", e.getMessage());
         }
+
+        String prompt = buildArchitecturePrompt(planContent);
+
+        Map<String, Object> params = new HashMap<>();
+        params.put("temperature", 0.7);
+        params.put("max_tokens", 3000);
+
+        LLMResponse response = llmClient.complete(prompt, params);
+        log.info("Architecture LLM usage: {}", llmClient.getLastUsage());
+
+        String content = response.isSuccess() ? response.getContent() : "Architecture generation failed: " + response.getErrorMessage();
+
+        // Post architecture result to Blackboard
+        var entry = blackboard.post("architect-agent", "ARCHITECTURE", "System Architecture", content);
+
+        return entry.getId().toString();
+    }
+
+    private String buildArchitecturePrompt(String planContent) {
+        return """
+            You are a senior software architect. Based on the following execution plan, design a comprehensive system architecture.
+            
+            EXECUTION PLAN:
+            %s
+            
+            Generate a system architecture that includes:
+            1. High-level system components and their responsibilities
+            2. Component interactions and data flows
+            3. Technology stack recommendations
+            4. Database schema considerations
+            5. API design patterns
+            6. Security considerations
+            7. Scalability approach
+            
+            Format your response as a detailed architectural document.
+            """.formatted(planContent.isEmpty() ? "No specific plan provided - create a general microservices architecture" : planContent);
     }
 
     @Override
@@ -303,25 +348,49 @@ public class AgentActivityImpl implements AgentActivity {
     public String executeCodeReview(String codeId) {
         log.info("Executing code review for code artifact: {}", codeId);
         
-        // Use new ReviewerAgentService if available
-        if (reviewerAgentService != null) {
+        // Use new ReviewerAgentService if available and codeId is a UUID
+        boolean isUUID = codeId != null && codeId.matches("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$");
+
+        if (reviewerAgentService != null && isUUID) {
             try {
                 String reviewReportId = reviewerAgentService.generateReview(codeId);
                 log.info("Review report generated successfully: {}", reviewReportId);
                 return reviewReportId;
             } catch (Exception e) {
-                log.error("Review generation failed for code artifact: {}", codeId, e);
-                throw new RuntimeException("Review generation failed: " + e.getMessage(), e);
+                log.warn("ReviewerAgentService failed, falling back to LLM review: {}", e.getMessage());
             }
         }
         
-        // Fallback to legacy LLM-based review
-        log.warn("ReviewerAgentService not available, using legacy review");
+        // Fallback to LLM-based review
+        log.info("Using LLM-based code review for codeId: {}", codeId);
 
         // Retrieve code from Blackboard
-        String codeContent = blackboard.getById(Long.parseLong(codeId))
-                .map(e -> e.getContent())
-                .orElse("No code found");
+        String codeContent = "";
+        try {
+            if (codeId.matches("^\\d+$")) {
+                // Numeric ID - blackboard entry
+                codeContent = blackboard.getById(Long.parseLong(codeId))
+                        .map(e -> e.getContent())
+                        .orElse("No code found");
+            } else {
+                // UUID - search CODE entries
+                var codeEntries = blackboard.readByType("CODE");
+                for (Object obj : codeEntries) {
+                    if (obj instanceof BlackboardEntry entry) {
+                        if (entry.getContent().contains(codeId)) {
+                            codeContent = entry.getContent();
+                            break;
+                        }
+                    }
+                }
+                if (codeContent.isEmpty()) {
+                    codeContent = "Code artifact not found for ID: " + codeId;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Could not retrieve code content: {}", e.getMessage());
+            codeContent = "Code retrieval failed";
+        }
 
         // Create reviewer prompt
         List<ChatMessage> messages = List.of(

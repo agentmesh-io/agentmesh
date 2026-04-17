@@ -54,33 +54,43 @@ services:
       timeout: 5s
       retries: 5
 
-  # Temporal Server
+  # Temporal Server for workflow orchestration
   temporal:
     image: temporalio/auto-setup:1.22.4
     container_name: agentmesh-temporal
     environment:
-      - DB=postgresql
+      - DB=postgres12
       - DB_PORT=5432
       - POSTGRES_USER=agentmesh
       - POSTGRES_PWD=agentmesh123
       - POSTGRES_SEEDS=postgres
-      - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
-      - ENABLE_ES=false
       - SKIP_SCHEMA_SETUP=false
       - SKIP_DEFAULT_NAMESPACE_CREATION=false
     ports:
       - "17233:7233"
-      - "18082:8080"
     depends_on:
       postgres:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "tctl --address localhost:7233 cluster health || exit 1"]
-      interval: 20s
+      test: ["CMD", "tctl", "--address", "localhost:7233", "cluster", "health"]
+      interval: 30s
       timeout: 10s
-      retries: 30
-      start_period: 180s
+      retries: 10
+      start_period: 120s
+
+  # Temporal Web UI
+  temporal-ui:
+    image: temporalio/ui:2.21.3
+    container_name: agentmesh-temporal-ui
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:13001
+    ports:
+      - "18082:8080"
+    depends_on:
+      - temporal
+    restart: unless-stopped
 
   # Zookeeper for Kafka coordination
   zookeeper:
@@ -164,7 +174,7 @@ services:
       AGENTMESH_WEAVIATE_SCHEME: http
       AGENTMESH_WEAVIATE_HOST: weaviate:8080
 
-      # Temporal Configuration - enabled but not blocking startup
+      # Temporal Configuration - enabled for workflow orchestration
       AGENTMESH_TEMPORAL_ENABLED: 'true'
       AGENTMESH_TEMPORAL_SERVICE_ADDRESS: temporal:7233
 
@@ -192,7 +202,7 @@ services:
       # LLM Configuration - Ollama (connects to host machine)
       AGENTMESH_LLM_OLLAMA_ENABLED: 'true'
       AGENTMESH_LLM_OLLAMA_BASE_URL: 'http://host.docker.internal:11434'
-      AGENTMESH_LLM_OLLAMA_MODEL: 'codellama:latest'
+      AGENTMESH_LLM_OLLAMA_MODEL: 'qwen3.5:latest'
       AGENTMESH_LLM_OPENAI_ENABLED: 'false'
       AGENTMESH_LLM_LORA_ENABLED: 'false'
 
@@ -208,6 +218,8 @@ services:
         condition: service_healthy
       weaviate:
         condition: service_healthy
+      temporal:
+        condition: service_started
       kafka:
         condition: service_started
       redis:
@@ -278,18 +290,17 @@ services:
     container_name: agentmesh-ui
     restart: unless-stopped
     environment:
-      # Internal container hostname
       HOSTNAME: "0.0.0.0"
-      PORT: "13001"
+      PORT: "3001"
     ports:
-      - "13001:13001"
+      - "13001:3001"
     depends_on:
       agentmesh-api:
         condition: service_started
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:13001/ || exit 1"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3001/ || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

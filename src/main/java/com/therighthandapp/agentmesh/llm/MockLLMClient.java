@@ -2,6 +2,7 @@ package com.therighthandapp.agentmesh.llm;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -12,11 +13,11 @@ import java.util.concurrent.ConcurrentHashMap;
  * Mock LLM implementation for deterministic testing.
  * Records calls and returns pre-configured responses.
  *
- * Only active when both ollama and openai are disabled.
+ * Only active when ollama is disabled (fallback).
  */
 @Component
 @ConditionalOnProperty(
-    name = {"agentmesh.llm.ollama.enabled", "agentmesh.llm.openai.enabled"},
+    name = "agentmesh.llm.ollama.enabled",
     havingValue = "false",
     matchIfMissing = true
 )

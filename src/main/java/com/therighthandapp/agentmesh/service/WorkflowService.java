@@ -2,6 +2,7 @@ package com.therighthandapp.agentmesh.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.therighthandapp.agentmesh.blackboard.BlackboardService;
 import com.therighthandapp.agentmesh.model.Workflow;
 import com.therighthandapp.agentmesh.model.Workflow.WorkflowStatus;
 import com.therighthandapp.agentmesh.orchestration.AgentActivity;
@@ -33,14 +34,47 @@ public class WorkflowService {
     private final AgentActivity agentActivity;
     private final AgentMeshWebSocketHandler webSocketHandler;
     private final ObjectMapper objectMapper;
+    private final BlackboardService blackboardService;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    @org.springframework.context.annotation.Lazy
+    private WorkflowAsyncExecutor workflowAsyncExecutor;
 
     /**
-     * Start a new workflow
+     * Start a new workflow - creates workflow record and triggers async execution.
+     * Delegates async execution to WorkflowAsyncExecutor (separate bean) to ensure
+     * Spring's @Async proxy is properly invoked.
+     *
+     * NOTE: This method is NOT @Transactional on purpose. The workflow record is created
+     * in its own transaction (REQUIRES_NEW via createWorkflowRecord), and the async
+     * execution runs in a completely separate thread/transaction context.
      */
-    @Transactional
     public Workflow startWorkflow(String projectName, String srsContent, String tenantId) {
         log.info("Starting new workflow for project: {}", projectName);
 
+        // Create and save workflow in a separate transaction
+        Workflow workflow = createWorkflowRecord(projectName, srsContent, tenantId);
+
+        log.info("Workflow {} created and saved, starting async execution", workflow.getId());
+
+        // Execute workflow asynchronously via separate bean (ensures @Async proxy works)
+        // Catch any exception from the async call itself (not from the async task)
+        try {
+            workflowAsyncExecutor.executeWorkflowAsync(workflow.getId(), srsContent);
+        } catch (Exception e) {
+            log.warn("Failed to schedule async workflow execution, workflow {} will continue in background: {}",
+                     workflow.getId(), e.getMessage());
+        }
+
+        return workflow;
+    }
+
+    /**
+     * Create the workflow record in the database.
+     * Uses REQUIRES_NEW to ensure this transaction is independent and commits immediately.
+     */
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public Workflow createWorkflowRecord(String projectName, String srsContent, String tenantId) {
         String workflowId = UUID.randomUUID().toString();
 
         Workflow workflow = Workflow.builder()
@@ -56,13 +90,7 @@ public class WorkflowService {
                 .phasesJson(createInitialPhasesJson())
                 .build();
 
-        workflow = workflowRepository.save(workflow);
-        log.info("Workflow {} created and saved", workflowId);
-
-        // Execute workflow asynchronously
-        executeWorkflowAsync(workflowId, srsContent);
-
-        return workflow;
+        return workflowRepository.save(workflow);
     }
 
     /**
@@ -133,21 +161,10 @@ public class WorkflowService {
     }
 
     /**
-     * Execute workflow phases asynchronously
+     * Execute all workflow phases sequentially.
+     * Called by WorkflowAsyncExecutor from a separate async thread.
      */
-    @Async
-    public CompletableFuture<Void> executeWorkflowAsync(String workflowId, String srsContent) {
-        return CompletableFuture.runAsync(() -> {
-            try {
-                executeWorkflowPhases(workflowId, srsContent);
-            } catch (Exception e) {
-                log.error("Workflow {} failed: {}", workflowId, e.getMessage(), e);
-                markWorkflowFailed(workflowId, e.getMessage());
-            }
-        });
-    }
-
-    private void executeWorkflowPhases(String workflowId, String srsContent) {
+    public void executeWorkflowPhases(String workflowId, String srsContent) {
         log.info("Executing workflow phases for: {}", workflowId);
 
         try {
@@ -218,8 +235,8 @@ public class WorkflowService {
         }
     }
 
-    @Transactional
-    protected void updateWorkflowPhase(String workflowId, String phase, String phaseStatus, int progress) {
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public void updateWorkflowPhase(String workflowId, String phase, String phaseStatus, int progress) {
         workflowRepository.findById(workflowId).ifPresent(workflow -> {
             workflow.setCurrentPhase(phase);
             workflow.setProgress(progress);
@@ -258,8 +275,8 @@ public class WorkflowService {
         });
     }
 
-    @Transactional
-    protected void updateWorkflowArtifact(String workflowId, String artifactType, String artifactId) {
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public void updateWorkflowArtifact(String workflowId, String artifactType, String artifactId) {
         workflowRepository.findById(workflowId).ifPresent(workflow -> {
             switch (artifactType) {
                 case "planId" -> workflow.setPlanId(artifactId);
@@ -273,8 +290,8 @@ public class WorkflowService {
         });
     }
 
-    @Transactional
-    protected void markWorkflowCompleted(String workflowId) {
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public void markWorkflowCompleted(String workflowId) {
         workflowRepository.findById(workflowId).ifPresent(workflow -> {
             workflow.setStatus(WorkflowStatus.COMPLETED);
             workflow.setProgress(100);
@@ -293,8 +310,8 @@ public class WorkflowService {
         });
     }
 
-    @Transactional
-    protected void markWorkflowFailed(String workflowId, String errorMessage) {
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public void markWorkflowFailed(String workflowId, String errorMessage) {
         workflowRepository.findById(workflowId).ifPresent(workflow -> {
             workflow.setStatus(WorkflowStatus.FAILED);
             workflow.setErrorMessage(errorMessage);
@@ -337,6 +354,116 @@ public class WorkflowService {
     /**
      * Convert Workflow entity to API response map
      */
+    /**
+     * Get workflow artifacts with their actual content from Blackboard
+     */
+    public Optional<Map<String, Object>> getWorkflowArtifacts(String workflowId) {
+        return workflowRepository.findById(workflowId).map(workflow -> {
+            Map<String, Object> result = new HashMap<>();
+            result.put("workflowId", workflowId);
+            result.put("projectName", workflow.getProjectName());
+            result.put("status", workflow.getStatus().name());
+            result.put("currentPhase", workflow.getCurrentPhase());
+            result.put("progress", workflow.getProgress());
+
+            // Get plan artifact
+            if (workflow.getPlanId() != null) {
+                Map<String, Object> planArtifact = new HashMap<>();
+                planArtifact.put("id", workflow.getPlanId());
+                planArtifact.put("phase", "PLANNING");
+                try {
+                    Long planEntryId = Long.parseLong(workflow.getPlanId());
+                    blackboardService.getById(planEntryId).ifPresent(entry -> {
+                        planArtifact.put("content", entry.getContent());
+                        planArtifact.put("timestamp", entry.getTimestamp());
+                        planArtifact.put("agentId", entry.getAgentId());
+                    });
+                } catch (NumberFormatException e) {
+                    // UUID format - search by type
+                    log.debug("Plan ID is not numeric: {}", workflow.getPlanId());
+                }
+                result.put("plan", planArtifact);
+            }
+
+            // Get architecture artifact
+            if (workflow.getArchitectureId() != null) {
+                Map<String, Object> archArtifact = new HashMap<>();
+                archArtifact.put("id", workflow.getArchitectureId());
+                archArtifact.put("phase", "ARCHITECTURE");
+                try {
+                    Long archEntryId = Long.parseLong(workflow.getArchitectureId());
+                    blackboardService.getById(archEntryId).ifPresent(entry -> {
+                        archArtifact.put("content", entry.getContent());
+                        archArtifact.put("timestamp", entry.getTimestamp());
+                        archArtifact.put("agentId", entry.getAgentId());
+                    });
+                } catch (NumberFormatException e) {
+                    log.debug("Architecture ID is not numeric: {}", workflow.getArchitectureId());
+                }
+                result.put("architecture", archArtifact);
+            }
+
+            // Get code artifact
+            if (workflow.getCodeId() != null) {
+                Map<String, Object> codeArtifact = new HashMap<>();
+                codeArtifact.put("id", workflow.getCodeId());
+                codeArtifact.put("phase", "CODE_GENERATION");
+                // Code IDs are UUIDs, search CODE type entries
+                blackboardService.readByType("CODE").stream()
+                    .filter(entry -> entry.getContent() != null && entry.getContent().contains(workflow.getCodeId()))
+                    .findFirst()
+                    .ifPresent(entry -> {
+                        codeArtifact.put("content", entry.getContent());
+                        codeArtifact.put("timestamp", entry.getTimestamp());
+                        codeArtifact.put("agentId", entry.getAgentId());
+                    });
+                result.put("code", codeArtifact);
+            }
+
+            // Get test artifact
+            if (workflow.getTestId() != null) {
+                Map<String, Object> testArtifact = new HashMap<>();
+                testArtifact.put("id", workflow.getTestId());
+                testArtifact.put("phase", "TESTING");
+                try {
+                    Long testEntryId = Long.parseLong(workflow.getTestId());
+                    blackboardService.getById(testEntryId).ifPresent(entry -> {
+                        testArtifact.put("content", entry.getContent());
+                        testArtifact.put("timestamp", entry.getTimestamp());
+                        testArtifact.put("agentId", entry.getAgentId());
+                    });
+                } catch (NumberFormatException e) {
+                    log.debug("Test ID is not numeric: {}", workflow.getTestId());
+                }
+                result.put("tests", testArtifact);
+            }
+
+            // Get review artifact
+            if (workflow.getReviewId() != null) {
+                Map<String, Object> reviewArtifact = new HashMap<>();
+                reviewArtifact.put("id", workflow.getReviewId());
+                reviewArtifact.put("phase", "REVIEW");
+                try {
+                    Long reviewEntryId = Long.parseLong(workflow.getReviewId());
+                    blackboardService.getById(reviewEntryId).ifPresent(entry -> {
+                        reviewArtifact.put("content", entry.getContent());
+                        reviewArtifact.put("timestamp", entry.getTimestamp());
+                        reviewArtifact.put("agentId", entry.getAgentId());
+                    });
+                } catch (NumberFormatException e) {
+                    log.debug("Review ID is not numeric: {}", workflow.getReviewId());
+                }
+                result.put("review", reviewArtifact);
+            }
+
+            // Add timestamps
+            result.put("startedAt", workflow.getStartedAt() != null ? workflow.getStartedAt().toString() : null);
+            result.put("completedAt", workflow.getCompletedAt() != null ? workflow.getCompletedAt().toString() : null);
+
+            return result;
+        });
+    }
+
     public Map<String, Object> toResponseMap(Workflow workflow) {
         Map<String, Object> response = new HashMap<>();
         response.put("id", workflow.getId());

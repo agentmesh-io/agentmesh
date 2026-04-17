@@ -41,7 +41,7 @@ public class ArchitectAgentService {
      * @param planId The execution plan identifier from PlannerAgent
      * @return Generated and validated system architecture
      */
-    @Transactional
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public SystemArchitecture generateArchitecture(String planId) {
         log.info("Starting architecture generation for plan: {}", planId);
         long startTime = System.currentTimeMillis();

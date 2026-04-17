@@ -2,6 +2,7 @@ package com.therighthandapp.agentmesh.orchestration;
 
 import io.temporal.client.WorkflowClient;
 import io.temporal.serviceclient.WorkflowServiceStubs;
+import io.temporal.serviceclient.WorkflowServiceStubsOptions;
 import io.temporal.worker.Worker;
 import io.temporal.worker.WorkerFactory;
 import org.slf4j.Logger;
@@ -11,16 +12,20 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import jakarta.annotation.PostConstruct;
+import java.time.Duration;
+
 /**
  * Configuration for Temporal workflow engine integration.
  * All beans are conditional on agentmesh.temporal.enabled=true
+ * Includes retry logic to handle Temporal server startup delays.
  */
 @Configuration
+@ConditionalOnProperty(name = "agentmesh.temporal.enabled", havingValue = "true")
 public class TemporalConfig {
     private static final Logger log = LoggerFactory.getLogger(TemporalConfig.class);
-
-    @Value("${agentmesh.temporal.enabled:false}")
-    private boolean temporalEnabled;
+    private static final int MAX_RETRIES = 10;
+    private static final Duration RETRY_DELAY = Duration.ofSeconds(5);
 
     @Value("${agentmesh.temporal.service-address:127.0.0.1:7233}")
     private String temporalServiceAddress;
@@ -31,30 +36,45 @@ public class TemporalConfig {
     @Value("${agentmesh.temporal.task-queue:agentmesh-tasks}")
     private String taskQueue;
 
-    @Bean
-    @ConditionalOnProperty(name = "agentmesh.temporal.enabled", havingValue = "true")
-    WorkflowServiceStubs workflowServiceStubs() {
-        try {
-            WorkflowServiceStubs service = WorkflowServiceStubs.newServiceStubs(
-                    io.temporal.serviceclient.WorkflowServiceStubsOptions.newBuilder()
-                            .setTarget(temporalServiceAddress)
-                            .build()
-            );
-            log.info("Connected to Temporal service at {}", temporalServiceAddress);
-            return service;
-        } catch (Exception e) {
-            log.warn("Failed to connect to Temporal service: {}. Running in mock mode.", e.getMessage());
-            return null;
-        }
+    @PostConstruct
+    public void init() {
+        log.info("Temporal integration enabled. Service address: {}", temporalServiceAddress);
     }
 
     @Bean
-    @ConditionalOnProperty(name = "agentmesh.temporal.enabled", havingValue = "true")
-    WorkflowClient workflowClient(WorkflowServiceStubs serviceStubs) {
-        if (serviceStubs == null) {
-            return null;
+    WorkflowServiceStubs workflowServiceStubs() {
+        log.info("Connecting to Temporal service at {}", temporalServiceAddress);
+
+        for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                WorkflowServiceStubs service = WorkflowServiceStubs.newServiceStubs(
+                        WorkflowServiceStubsOptions.newBuilder()
+                                .setTarget(temporalServiceAddress)
+                                .setRpcTimeout(Duration.ofSeconds(30))
+                                .build()
+                );
+                log.info("Successfully connected to Temporal service at {}", temporalServiceAddress);
+                return service;
+            } catch (Exception e) {
+                log.warn("Attempt {}/{} - Failed to connect to Temporal service: {}",
+                        attempt, MAX_RETRIES, e.getMessage());
+                if (attempt < MAX_RETRIES) {
+                    try {
+                        Thread.sleep(RETRY_DELAY.toMillis());
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new RuntimeException("Interrupted while waiting to retry Temporal connection", ie);
+                    }
+                }
+            }
         }
 
+        throw new RuntimeException("Failed to connect to Temporal service after " + MAX_RETRIES + " attempts");
+    }
+
+    @Bean
+    WorkflowClient workflowClient(WorkflowServiceStubs serviceStubs) {
+        log.info("Creating Temporal WorkflowClient for namespace: {}", temporalNamespace);
         return WorkflowClient.newInstance(serviceStubs,
                 io.temporal.client.WorkflowClientOptions.newBuilder()
                         .setNamespace(temporalNamespace)
@@ -62,12 +82,8 @@ public class TemporalConfig {
     }
 
     @Bean
-    @ConditionalOnProperty(name = "agentmesh.temporal.enabled", havingValue = "true")
     WorkerFactory workerFactory(WorkflowClient workflowClient, AgentActivityImpl activityImpl) {
-        if (workflowClient == null) {
-            log.info("Temporal worker not started (Temporal disabled)");
-            return null;
-        }
+        log.info("Starting Temporal worker for task queue: {}", taskQueue);
 
         WorkerFactory factory = WorkerFactory.newInstance(workflowClient);
         Worker worker = factory.newWorker(taskQueue);
@@ -80,7 +96,7 @@ public class TemporalConfig {
 
         // Start workers
         factory.start();
-        log.info("Temporal worker started for task queue: {}", taskQueue);
+        log.info("Temporal worker started successfully for task queue: {}", taskQueue);
 
         return factory;
     }

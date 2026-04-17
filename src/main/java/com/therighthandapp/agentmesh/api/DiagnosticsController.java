@@ -167,9 +167,9 @@ public class DiagnosticsController {
 
             if (llmClient.getLastUsage() != null) {
                 result.put("usage", Map.of(
-                    "promptTokens", llmClient.getLastUsage().promptTokens(),
-                    "completionTokens", llmClient.getLastUsage().completionTokens(),
-                    "totalTokens", llmClient.getLastUsage().totalTokens()
+                    "promptTokens", llmClient.getLastUsage().getPromptTokens(),
+                    "completionTokens", llmClient.getLastUsage().getCompletionTokens(),
+                    "totalTokens", llmClient.getLastUsage().getTotalTokens()
                 ));
             }
 

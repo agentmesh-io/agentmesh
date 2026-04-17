@@ -142,6 +142,99 @@ public class WorkflowController {
             .orElse(ResponseEntity.notFound().build());
     }
 
+    /**
+     * Get planning results for a workflow
+     * GET /api/workflows/{id}/planning-results
+     */
+    @GetMapping("/{id}/planning-results")
+    public ResponseEntity<Map<String, Object>> getPlanningResults(@PathVariable String id) {
+        log.info("GET /api/workflows/{}/planning-results - Fetching planning results", id);
+
+        return workflowService.getWorkflow(id)
+            .map(workflow -> {
+                Map<String, Object> results = new HashMap<>();
+                results.put("workflowId", workflow.getId());
+                results.put("projectName", workflow.getProjectName());
+                results.put("status", workflow.getStatus().name());
+                results.put("currentPhase", workflow.getCurrentPhase());
+                results.put("progress", workflow.getProgress());
+
+                // Get artifacts from workflow fields
+                Map<String, Object> artifacts = new HashMap<>();
+                if (workflow.getPlanId() != null) {
+                    artifacts.put("planId", workflow.getPlanId());
+                    results.put("planId", workflow.getPlanId());
+                }
+                if (workflow.getArchitectureId() != null) {
+                    artifacts.put("architectureId", workflow.getArchitectureId());
+                    results.put("architectureId", workflow.getArchitectureId());
+                }
+                if (workflow.getCodeId() != null) {
+                    artifacts.put("codeId", workflow.getCodeId());
+                }
+                if (workflow.getTestId() != null) {
+                    artifacts.put("testId", workflow.getTestId());
+                }
+                if (workflow.getReviewId() != null) {
+                    artifacts.put("reviewId", workflow.getReviewId());
+                }
+                results.put("artifacts", artifacts);
+
+                // Add phases information
+                String phasesJson = workflow.getPhasesJson();
+                if (phasesJson != null && !phasesJson.isEmpty()) {
+                    try {
+                        List<Map<String, Object>> phases = new com.fasterxml.jackson.databind.ObjectMapper()
+                            .readValue(phasesJson, List.class);
+                        results.put("phases", phases);
+                    } catch (Exception e) {
+                        log.warn("Failed to parse phases JSON: {}", e.getMessage());
+                        results.put("phases", List.of());
+                    }
+                } else {
+                    results.put("phases", List.of());
+                }
+
+                // Add SRS content summary
+                String srsContent = workflow.getSrsContent();
+                if (srsContent != null) {
+                    results.put("srsContent", srsContent);
+                    results.put("srsSummary", srsContent.length() > 500
+                        ? srsContent.substring(0, 500) + "..."
+                        : srsContent);
+                }
+
+                // Add timestamps
+                results.put("startedAt", workflow.getStartedAt() != null
+                    ? workflow.getStartedAt().toString() : null);
+                results.put("completedAt", workflow.getCompletedAt() != null
+                    ? workflow.getCompletedAt().toString() : null);
+                results.put("lastUpdatedAt", workflow.getLastUpdatedAt() != null
+                    ? workflow.getLastUpdatedAt().toString() : null);
+
+                // Add error message if failed
+                if (workflow.getStatus().name().equals("FAILED")) {
+                    results.put("errorMessage", workflow.getErrorMessage());
+                }
+
+                return ResponseEntity.ok(results);
+            })
+            .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * Get workflow artifacts (actual content from each phase)
+     * GET /api/workflows/{id}/artifacts
+     */
+    @GetMapping("/{id}/artifacts")
+    public ResponseEntity<Map<String, Object>> getWorkflowArtifacts(@PathVariable String id) {
+        log.info("GET /api/workflows/{}/artifacts - Fetching workflow artifacts", id);
+
+        return workflowService.getWorkflowArtifacts(id)
+            .map(ResponseEntity::ok)
+            .orElse(ResponseEntity.notFound().build());
+    }
+
     private List<Map<String, Object>> createGraphNodes(Workflow workflow) {
         String currentPhase = workflow.getCurrentPhase();
         String status = workflow.getStatus().name();
