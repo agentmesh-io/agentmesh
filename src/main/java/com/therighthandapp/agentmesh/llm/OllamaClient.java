@@ -22,7 +22,7 @@ import java.util.*;
  * @see <a href="https://ollama.ai">Ollama Documentation</a>
  */
 @Component
-@ConditionalOnProperty(name = "agentmesh.llm.ollama.enabled", havingValue = "true")
+@ConditionalOnProperty(name = "agentmesh.llm.provider", havingValue = "ollama", matchIfMissing = false)
 public class OllamaClient implements LLMClient {
 
     private static final Logger log = LoggerFactory.getLogger(OllamaClient.class);

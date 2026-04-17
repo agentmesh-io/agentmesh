@@ -12,35 +12,40 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 
 /**
- * LLM Configuration with smart fallback.
+ * LLM Configuration with multi-provider support.
  *
- * Priority:
- * 1. OllamaClient (if agentmesh.llm.ollama.enabled=true and Ollama is reachable)
- * 2. OpenAIClient (if agentmesh.llm.openai.enabled=true)
- * 3. MockLLMClient (fallback for development/testing)
+ * Provider priority (set via agentmesh.llm.provider):
+ * 1. "openai-compatible" → OpenAICompatibleClient (LMStudio, Ollama /v1, OpenAI, etc.)
+ * 2. "ollama" → OllamaClient (Ollama native API)
+ * 3. (none) → MockLLMClient (fallback for dev/test)
+ *
+ * Per Architect Protocol v7.8:
+ *   - LMStudio is the primary local inference engine (http://localhost:1234/v1)
+ *   - Use OpenAI-compatible SDKs for service portability
+ *   - Never download models to project folders (use $LMSTUDIO_MODELS_PATH)
  */
 @Configuration
 public class LLMConfig {
 
     private static final Logger log = LoggerFactory.getLogger(LLMConfig.class);
 
-    @Value("${agentmesh.llm.ollama.enabled:false}")
-    private boolean ollamaEnabled;
-
-    @Value("${agentmesh.llm.openai.enabled:false}")
-    private boolean openaiEnabled;
+    @Value("${agentmesh.llm.provider:}")
+    private String provider;
 
     /**
-     * Fallback LLM client when no other client is configured.
+     * Fallback LLM client when no provider is configured.
      * This ensures the application always has an LLM client available.
      */
     @Bean
     @ConditionalOnMissingBean(LLMClient.class)
     public LLMClient fallbackLLMClient() {
-        log.warn("No LLM client configured. Using MockLLMClient as fallback.");
-        log.warn("To use a real LLM, enable either:");
-        log.warn("  - agentmesh.llm.ollama.enabled=true (for local Ollama)");
-        log.warn("  - agentmesh.llm.openai.enabled=true (for OpenAI)");
+        log.warn("═══════════════════════════════════════════════════════");
+        log.warn("  No LLM provider configured. Using MockLLMClient.");
+        log.warn("  To use a real LLM, set one of:");
+        log.warn("    agentmesh.llm.provider=openai-compatible  (LMStudio/OpenAI)");
+        log.warn("    agentmesh.llm.provider=ollama             (Ollama native)");
+        log.warn("  LMStudio default: http://localhost:1234/v1");
+        log.warn("═══════════════════════════════════════════════════════");
         return new MockLLMClient();
     }
 }

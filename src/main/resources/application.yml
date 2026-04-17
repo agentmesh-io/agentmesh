@@ -102,22 +102,33 @@ agentmesh:
 
   # LLM Configuration
   llm:
-    # Ollama Configuration (Local LLM - recommended for development)
-    ollama:
-      enabled: true  # Set to true for local development with Ollama
-      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
-      model: ${OLLAMA_MODEL:codellama:latest}  # Good for code generation
-      embedding-model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
-      # Alternative models available on this system:
-      # - codellama:7b-code   (optimized for code)
-      # - phi3:mini           (lightweight, fast)
-      # - qwen2.5:latest      (good quality)
-      # - llama3.2:latest     (general purpose)
+    # Provider selection: "openai-compatible" | "ollama" | (empty = MockLLM)
+    # "openai-compatible" works with LMStudio, Ollama /v1, OpenAI, Azure, Groq, etc.
+    provider: ${LLM_PROVIDER:}  # Set to "openai-compatible" for real LLM
 
-    # OpenAI Configuration (for production or when higher quality needed)
+    # OpenAI-compatible settings (used when provider=openai-compatible)
+    # LMStudio default: http://localhost:1234/v1
+    # Ollama compat:    http://localhost:11434/v1
+    # OpenAI:           https://api.openai.com/v1
+    base-url: ${LLM_BASE_URL:http://localhost:1234/v1}
+    api-key: ${LLM_API_KEY:}
+    model: ${LLM_MODEL:default}
+    embedding-model: ${LLM_EMBEDDING_MODEL:text-embedding-nomic-embed-text-v1.5}
+    temperature: ${LLM_TEMPERATURE:0.7}
+    max-tokens: ${LLM_MAX_TOKENS:4096}
+    timeout: ${LLM_TIMEOUT:120000}
+
+    # Ollama native API (used when provider=ollama, legacy support)
+    ollama:
+      enabled: ${OLLAMA_ENABLED:false}
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      model: ${OLLAMA_MODEL:codellama:latest}
+      embedding-model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
+
+    # OpenAI direct (legacy, prefer openai-compatible provider instead)
     openai:
-      enabled: false  # Set to true to use OpenAI instead of Ollama
-      api-key: ${OPENAI_API_KEY:}  # Set via environment variable
+      enabled: false
+      api-key: ${OPENAI_API_KEY:}
       model: gpt-4
       embedding-model: text-embedding-ada-002
 
