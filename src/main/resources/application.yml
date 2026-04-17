@@ -145,6 +145,12 @@ agentmesh:
     max-iterations: 5  # Maximum correction attempts
     timeout-seconds: 300  # 5 minutes timeout per task
 
+  # Security Configuration
+  security:
+    api-key-auth:
+      enabled: ${API_KEY_AUTH_ENABLED:false}  # Enable for production
+    api-key: ${AGENTMESH_API_KEY:}  # Set via env var for production
+
   # Multi-Tenancy Configuration
   multitenancy:
     enabled: false  # Set to true to enable multi-tenancy
