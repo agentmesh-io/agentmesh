@@ -1,6 +1,5 @@
 package com.therighthandapp.agentmesh.monitoring;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.actuate.health.Health;
 import org.springframework.boot.actuate.health.HealthIndicator;
 import org.springframework.stereotype.Component;
@@ -14,7 +13,6 @@ public class ConnectionPoolHealthIndicator implements HealthIndicator {
 
     private final ConnectionPoolMonitor poolMonitor;
 
-    @Autowired
     public ConnectionPoolHealthIndicator(ConnectionPoolMonitor poolMonitor) {
         this.poolMonitor = poolMonitor;
     }
@@ -32,7 +30,7 @@ public class ConnectionPoolHealthIndicator implements HealthIndicator {
                 .withDetail("activeConnections", stats.getActiveConnections())
                 .withDetail("idleConnections", stats.getIdleConnections())
                 .withDetail("threadsAwaitingConnection", stats.getThreadsAwaitingConnection())
-                .withDetail("utilizationPercent", String.format("%.1f%%", stats.getUtilizationPercent()))
+                .withDetail("utilizationPercent", "%.1f%%".formatted(stats.getUtilizationPercent()))
                 .build();
     }
 }

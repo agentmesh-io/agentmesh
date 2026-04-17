@@ -25,33 +25,12 @@ spring:
       connection-timeout: 20000     # 20 seconds - wait time for connection from pool
       idle-timeout: 300000          # 5 minutes - max time connection can sit idle
       max-lifetime: 1800000         # 30 minutes - max lifetime of connection in pool
-      validation-timeout: 5000      # 5 seconds - max time for connection validation
-      
-      # Performance tuning
-      auto-commit: false            # Disable auto-commit for better performance
-      leak-detection-threshold: 60000  # 60 seconds - detect connection leaks
-      
-      # Connection testing
-      connection-test-query: SELECT 1  # Validate connections
-      
-      # Pool name for monitoring
-      pool-name: AgentMeshHikariPool
-      
-      # JMX monitoring
-      register-mbeans: true
-      
-      # Additional properties for H2
-      data-source-properties:
-        cachePrepStmts: true
-        prepStmtCacheSize: 250
-        prepStmtCacheSqlLimit: 2048
-        useServerPrepStmts: true
 
   # JPA/Hibernate configuration
   jpa:
     database-platform: org.hibernate.dialect.H2Dialect
     hibernate:
-      ddl-auto: validate  # Changed from create-drop to validate (Flyway manages schema)
+      ddl-auto: create-drop  # Use create-drop for dev (Flyway disabled for H2 compatibility)
     show-sql: false
     properties:
       hibernate:
@@ -59,7 +38,7 @@ spring:
 
   # Flyway Database Migration Configuration
   flyway:
-    enabled: true                    # Enable Flyway migrations
+    enabled: false                   # Disabled for H2 - enable for PostgreSQL production
     baseline-on-migrate: true        # Baseline existing databases
     baseline-version: 0              # Version to use for baseline
     locations: classpath:db/migration  # Migration scripts location
@@ -78,6 +57,16 @@ spring:
       enabled: true
       path: /h2-console
 
+  # Redis Configuration (for production)
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+
+  # Cache Configuration
+  cache:
+    type: ${SPRING_CACHE_TYPE:simple}
+
   # Kafka Configuration
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
@@ -94,6 +83,10 @@ spring:
 
 # AgentMesh specific configuration
 agentmesh:
+  # Auto-BADS Integration
+  autobads:
+    base-url: ${AUTOBADS_BASE_URL:http://localhost:8083}  # Use host.docker.internal:8083 in Docker
+  
   # Weaviate vector DB for Long-Term Memory
   weaviate:
     enabled: false  # Set to true when Weaviate is available
@@ -109,9 +102,21 @@ agentmesh:
 
   # LLM Configuration
   llm:
-    # OpenAI Configuration
+    # Ollama Configuration (Local LLM - recommended for development)
+    ollama:
+      enabled: true  # Set to true for local development with Ollama
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      model: ${OLLAMA_MODEL:codellama:latest}  # Good for code generation
+      embedding-model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
+      # Alternative models available on this system:
+      # - codellama:7b-code   (optimized for code)
+      # - phi3:mini           (lightweight, fast)
+      # - qwen2.5:latest      (good quality)
+      # - llama3.2:latest     (general purpose)
+
+    # OpenAI Configuration (for production or when higher quality needed)
     openai:
-      enabled: false  # Set to true to use OpenAI instead of MockLLM
+      enabled: false  # Set to true to use OpenAI instead of Ollama
       api-key: ${OPENAI_API_KEY:}  # Set via environment variable
       model: gpt-4
       embedding-model: text-embedding-ada-002
@@ -226,8 +231,7 @@ management:
         include: health,info,prometheus,metrics,beans,mappings
 
   metrics:
-    export:
-      prometheus:
-        enabled: true
     tags:
       application: ${spring.application.name}
+
+  prometheus.metrics.export.enabled: true

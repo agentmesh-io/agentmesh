@@ -30,7 +30,7 @@ public class TestRedisConfig {
      */
     @Bean
     @Primary
-    public ObjectMapper redisObjectMapper() {
+    ObjectMapper redisObjectMapper() {
         ObjectMapper mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
         mapper.findAndRegisterModules();
@@ -42,7 +42,7 @@ public class TestRedisConfig {
      */
     @Bean
     @Primary
-    public RedisConnectionFactory redisConnectionFactory() {
+    RedisConnectionFactory redisConnectionFactory() {
         return mock(RedisConnectionFactory.class);
     }
 
@@ -51,7 +51,7 @@ public class TestRedisConfig {
      */
     @Bean
     @Primary
-    public RedisTemplate<String, Object> redisTemplate(
+    RedisTemplate<String, Object> redisTemplate(
             RedisConnectionFactory connectionFactory,
             ObjectMapper redisObjectMapper) {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
@@ -76,7 +76,7 @@ public class TestRedisConfig {
      */
     @Bean
     @Primary
-    public CacheManager cacheManager() {
+    CacheManager cacheManager() {
         return new NoOpCacheManager();
     }
 }

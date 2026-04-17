@@ -171,9 +171,9 @@ public class GitHubWebhookController {
                 if (result.isSuccess()) {
                     // Phase 3: Create PR
                     githubService.addComment(issueNumber,
-                        String.format("✅ **Code Generated Successfully!**\\n\\n" +
+                        ("✅ **Code Generated Successfully!**\\n\\n" +
                             "- Self-correction iterations: %d\\n" +
-                            "- Creating pull request...\\n",
+                            "- Creating pull request...\\n").formatted(
                             result.getIterationCount()));
 
                     String prUrl = githubService.createPullRequest(
@@ -193,11 +193,11 @@ public class GitHubWebhookController {
                 } else {
                     // Failed
                     githubService.addComment(issueNumber,
-                        String.format("⚠️ **Code Generation Failed**\\n\\n" +
+                        ("⚠️ **Code Generation Failed**\\n\\n" +
                             "- Iterations attempted: %d\\n" +
                             "- Reason: %s\\n\\n" +
                             "Please review the requirements and try again. " +
-                            "You can comment `@agentmesh retry` to retry.",
+                            "You can comment `@agentmesh retry` to retry.").formatted(
                             result.getIterationCount(), result.getFailureReason()));
 
                     githubService.updateIssueLabels(issueNumber,
@@ -221,7 +221,7 @@ public class GitHubWebhookController {
      * Mock code generation for testing without self-correction
      */
     private CorrectionResult mockCodeGeneration(GitHubEvent.GitHubIssue issue) {
-        String code = String.format("""
+        String code = """
             package com.generated;
             
             /**
@@ -235,7 +235,7 @@ public class GitHubWebhookController {
                     System.out.println("Feature implementation");
                 }
             }
-            """, issue.getTitle(), issue.getNumber());
+            """.formatted(issue.getTitle(), issue.getNumber());
 
         return CorrectionResult.success(code, 1);
     }

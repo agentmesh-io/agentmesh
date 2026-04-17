@@ -51,7 +51,12 @@ public class BlackboardService {
     @Transactional
     @CacheEvict(value = {"blackboardEntries", "recentEntries"}, allEntries = true)
     public BlackboardEntry post(String agentId, String entryType, String title, String content) {
+        log.info("BlackboardService.post() called with content length: {} chars", content != null ? content.length() : 0);
+        log.debug("BlackboardService.post() content preview (first 200 chars): {}", 
+            content != null && content.length() > 0 ? content.substring(0, Math.min(200, content.length())) : "null or empty");
+        
         BlackboardEntry entry = new BlackboardEntry(agentId, entryType, title, content);
+        log.info("BlackboardEntry created - content length before save: {} chars", entry.getContent() != null ? entry.getContent().length() : 0);
 
         // Apply multi-tenant context if enabled
         if (multitenancyEnabled) {
@@ -69,6 +74,7 @@ public class BlackboardService {
         }
 
         BlackboardEntry saved = repository.save(entry);
+        log.info("BlackboardEntry saved - content length after save: {} chars", saved.getContent() != null ? saved.getContent().length() : 0);
 
         log.info("Blackboard: Agent {} posted entry [{}] type={} (tenant={}, project={})",
             agentId, title, entryType, saved.getTenantId(), saved.getProjectId());

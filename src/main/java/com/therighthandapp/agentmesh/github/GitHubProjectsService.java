@@ -36,7 +36,7 @@ public class GitHubProjectsService {
      * Add issue to project
      */
     public String addIssueToProject(String issueNodeId) {
-        String mutation = String.format("""
+        String mutation = """
             mutation {
               addProjectV2ItemById(input: {
                 projectId: "%s"
@@ -47,7 +47,7 @@ public class GitHubProjectsService {
                 }
               }
             }
-            """, projectId, issueNodeId);
+            """.formatted(projectId, issueNodeId);
 
         try {
             Map<String, Object> response = executeGraphQL(mutation);
@@ -79,7 +79,7 @@ public class GitHubProjectsService {
      */
     public void addIterationMetrics(String issueNumber, int iterations, boolean success,
                                     String failureReason) {
-        String comment = String.format("""
+        String comment = """
             🤖 **AgentMesh Completion Report**
             
             **Status:** %s
@@ -87,12 +87,12 @@ public class GitHubProjectsService {
             **Timestamp:** %s
             
             %s
-            """,
+            """.formatted(
             success ? "✅ Success" : "❌ Failed",
             iterations,
             java.time.Instant.now(),
             success ? "Code generated successfully and ready for review." :
-                     "**Failure Reason:** " + failureReason + "\\n\\nPlease review requirements and try again."
+                "**Failure Reason:** " + failureReason + "\\n\\nPlease review requirements and try again."
         );
 
         log.info("Metrics for issue #{}: {} iterations, success: {}", issueNumber, iterations, success);
@@ -103,7 +103,7 @@ public class GitHubProjectsService {
      * Update custom field value
      */
     public void updateCustomField(String itemId, String fieldId, Object value) {
-        String mutation = String.format("""
+        String mutation = """
             mutation {
               updateProjectV2ItemFieldValue(input: {
                 projectId: "%s"
@@ -116,7 +116,7 @@ public class GitHubProjectsService {
                 }
               }
             }
-            """, projectId, itemId, fieldId, value);
+            """.formatted(projectId, itemId, fieldId, value);
 
         try {
             executeGraphQL(mutation);

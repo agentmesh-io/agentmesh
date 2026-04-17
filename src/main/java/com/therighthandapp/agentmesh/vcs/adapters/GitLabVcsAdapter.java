@@ -61,7 +61,7 @@ public class GitLabVcsAdapter implements VcsProvider {
         commitFiles(sourceBranch, "Add generated code", files);
 
         // 3. Create merge request
-        String url = String.format("%s/api/v4/projects/%s/merge_requests",
+        String url = "%s/api/v4/projects/%s/merge_requests".formatted(
             gitlabUrl, projectId);
 
         Map<String, Object> body = new HashMap<>();
@@ -84,7 +84,7 @@ public class GitLabVcsAdapter implements VcsProvider {
     public void addComment(String issueId, String comment) {
         log.info("Adding comment to GitLab issue #{}", issueId);
 
-        String url = String.format("%s/api/v4/projects/%s/issues/%s/notes",
+        String url = "%s/api/v4/projects/%s/issues/%s/notes".formatted(
             gitlabUrl, projectId, issueId);
 
         Map<String, String> body = Map.of("body", comment);
@@ -97,7 +97,7 @@ public class GitLabVcsAdapter implements VcsProvider {
     public void updateLabels(String issueId, List<String> labels) {
         log.info("Updating labels for GitLab issue #{}", issueId);
 
-        String url = String.format("%s/api/v4/projects/%s/issues/%s",
+        String url = "%s/api/v4/projects/%s/issues/%s".formatted(
             gitlabUrl, projectId, issueId);
 
         Map<String, String> body = Map.of("labels", String.join(",", labels));
@@ -108,7 +108,7 @@ public class GitLabVcsAdapter implements VcsProvider {
 
     @Override
     public VcsIssue getIssue(String issueId) {
-        String url = String.format("%s/api/v4/projects/%s/issues/%s",
+        String url = "%s/api/v4/projects/%s/issues/%s".formatted(
             gitlabUrl, projectId, issueId);
 
         ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET,
@@ -129,7 +129,7 @@ public class GitLabVcsAdapter implements VcsProvider {
 
     @Override
     public VcsRepository getRepository() {
-        String url = String.format("%s/api/v4/projects/%s", gitlabUrl, projectId);
+        String url = "%s/api/v4/projects/%s".formatted(gitlabUrl, projectId);
 
         ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET,
             new HttpEntity<>(getHeaders()), Map.class);
@@ -151,7 +151,7 @@ public class GitLabVcsAdapter implements VcsProvider {
     public void createBranch(String branchName, String fromBranch) {
         log.info("Creating GitLab branch: {}", branchName);
 
-        String url = String.format("%s/api/v4/projects/%s/repository/branches",
+        String url = "%s/api/v4/projects/%s/repository/branches".formatted(
             gitlabUrl, projectId);
 
         Map<String, String> body = Map.of(
@@ -167,7 +167,7 @@ public class GitLabVcsAdapter implements VcsProvider {
     public void commitFiles(String branchName, String commitMessage, Map<String, String> files) {
         log.info("Committing {} files to branch {}", files.size(), branchName);
 
-        String url = String.format("%s/api/v4/projects/%s/repository/commits",
+        String url = "%s/api/v4/projects/%s/repository/commits".formatted(
             gitlabUrl, projectId);
 
         // Build actions array

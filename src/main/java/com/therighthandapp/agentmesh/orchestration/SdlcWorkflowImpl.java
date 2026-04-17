@@ -31,23 +31,25 @@ public class SdlcWorkflowImpl implements SdlcWorkflow {
 
     @Override
     public String executeFeatureDevelopment(String featureRequest) {
-        log.info("Starting SDLC workflow for feature request");
+        log.info("Starting SDLC workflow for SRS ID: {}", featureRequest);
 
         // Step 1: Planning (Planner Agent)
+        // featureRequest is actually the SRS ID from Auto-BADS
+        // PlannerAgentService will retrieve the full SRS content using this ID
         String planId = activities.executePlanning(featureRequest);
-        log.info("Planning complete: {}", planId);
+        log.info("Planning complete: planId={}", planId);
 
         // Step 2: Code Generation (Coder Agent)
         String codeId = activities.executeCodeGeneration(planId, "Implement feature");
-        log.info("Code generation complete: {}", codeId);
+        log.info("Code generation complete: codeId={}", codeId);
 
         // Step 3: Test Generation (Test Agent)
         String testId = activities.executeTestGeneration(codeId);
-        log.info("Test generation complete: {}", testId);
+        log.info("Test generation complete: testId={}", testId);
 
         // Step 4: Code Review (Reviewer Agent)
         String reviewId = activities.executeCodeReview(codeId);
-        log.info("Code review complete: {}", reviewId);
+        log.info("Code review complete: reviewId={}", reviewId);
 
         // In production, this would include:
         // - A loop checking test results
@@ -55,7 +57,7 @@ public class SdlcWorkflowImpl implements SdlcWorkflow {
         // - Multiple iterations of the self-correction loop
         // - Snapshot/rollback capability
 
-        log.info("SDLC workflow completed successfully");
+        log.info("SDLC workflow completed successfully for SRS ID: {}", featureRequest);
         return codeId;
     }
 }

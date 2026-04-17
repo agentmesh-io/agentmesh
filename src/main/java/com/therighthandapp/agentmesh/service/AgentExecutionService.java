@@ -256,15 +256,17 @@ public class AgentExecutionService {
 
             // Create review prompt
             List<ChatMessage> messages = List.of(
-                ChatMessage.system("You are a senior code reviewer. Analyze the code for:\n" +
-                    "1) Proper annotations and best practices\n" +
-                    "2) Exception handling and error management\n" +
-                    "3) Validation and security\n" +
-                    "4) Code structure and maintainability\n" +
-                    "5) Missing documentation (JavaDoc)\n" +
-                    "6) Missing logging\n\n" +
-                    "Provide a structured review with: Status (APPROVED/APPROVED_WITH_RECOMMENDATIONS/REJECTED), " +
-                    "Issues Found (count), Detailed Issues (list), Recommendations, and Overall Score (1-10)."),
+                ChatMessage.system("""
+                    You are a senior code reviewer. Analyze the code for:
+                    1) Proper annotations and best practices
+                    2) Exception handling and error management
+                    3) Validation and security
+                    4) Code structure and maintainability
+                    5) Missing documentation (JavaDoc)
+                    6) Missing logging
+                    
+                    Provide a structured review with: Status (APPROVED/APPROVED_WITH_RECOMMENDATIONS/REJECTED), \
+                    Issues Found (count), Detailed Issues (list), Recommendations, and Overall Score (1-10)."""),
                 ChatMessage.user("Review this code:\n\n" + codeToReview.toString())
             );
 
@@ -369,22 +371,24 @@ public class AgentExecutionService {
 
             // 1. Generate Unit Tests
             String unitTestCode = generateTests(codeToTest.toString(), "Unit",
-                "Generate comprehensive unit tests using JUnit 5 and Mockito. Include:\n" +
-                "- Tests for all public methods\n" +
-                "- Tests for success scenarios\n" +
-                "- Tests for error scenarios (validation failures, not found, etc.)\n" +
-                "- Proper use of mocks and assertions\n" +
-                "Use @WebMvcTest for controller tests.");
+                """
+                Generate comprehensive unit tests using JUnit 5 and Mockito. Include:
+                - Tests for all public methods
+                - Tests for success scenarios
+                - Tests for error scenarios (validation failures, not found, etc.)
+                - Proper use of mocks and assertions
+                Use @WebMvcTest for controller tests.""");
             String unitTestId = storeTestArtifact(projectId, "UserControllerTest.java", "UNIT_TEST", unitTestCode);
             testArtifactIds.add(unitTestId);
 
             // 2. Generate Integration Tests
             String integrationTestCode = generateTests(codeToTest.toString(), "Integration",
-                "Generate integration tests using @SpringBootTest. Include:\n" +
-                "- End-to-end API tests\n" +
-                "- Database interaction tests\n" +
-                "- Transaction tests\n" +
-                "Use TestRestTemplate or MockMvc for HTTP requests.");
+                """
+                Generate integration tests using @SpringBootTest. Include:
+                - End-to-end API tests
+                - Database interaction tests
+                - Transaction tests
+                Use TestRestTemplate or MockMvc for HTTP requests.""");
             String integrationTestId = storeTestArtifact(projectId, "UserServiceIntegrationTest.java", 
                 "INTEGRATION_TEST", integrationTestCode);
             testArtifactIds.add(integrationTestId);

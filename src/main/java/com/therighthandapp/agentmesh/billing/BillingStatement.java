@@ -102,8 +102,8 @@ public class BillingStatement {
 
     @Override
     public String toString() {
-        return String.format("BillingStatement{tenant=%s (%s), period=%s to %s, tokens=%d, " +
-            "tokenCost=$%.2f, outcomeCost=$%.2f, discount=$%.2f, total=$%.2f}",
+        return ("BillingStatement{tenant=%s (%s), period=%s to %s, tokens=%d, " +
+            "tokenCost=$%.2f, outcomeCost=$%.2f, discount=$%.2f, total=$%.2f}").formatted(
             tenantName, tier, periodStart, periodEnd, totalTokens,
             tokenCost, outcomeCost, discount, totalCost);
     }

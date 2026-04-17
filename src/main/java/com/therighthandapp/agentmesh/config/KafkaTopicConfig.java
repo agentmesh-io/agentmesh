@@ -22,7 +22,7 @@ public class KafkaTopicConfig {
     public static final String DEPLOYMENT_READY_DLT = "agentmesh.deployment.ready.dlt";
 
     @Bean
-    public NewTopic projectInitializedTopic() {
+    NewTopic projectInitializedTopic() {
         return TopicBuilder
             .name(PROJECT_INITIALIZED_TOPIC)
             .partitions(3)
@@ -31,7 +31,7 @@ public class KafkaTopicConfig {
     }
 
     @Bean
-    public NewTopic codeGeneratedTopic() {
+    NewTopic codeGeneratedTopic() {
         return TopicBuilder
             .name(CODE_GENERATED_TOPIC)
             .partitions(3)
@@ -40,7 +40,7 @@ public class KafkaTopicConfig {
     }
 
     @Bean
-    public NewTopic deploymentReadyTopic() {
+    NewTopic deploymentReadyTopic() {
         return TopicBuilder
             .name(DEPLOYMENT_READY_TOPIC)
             .partitions(3)
@@ -49,7 +49,7 @@ public class KafkaTopicConfig {
     }
 
     @Bean
-    public NewTopic projectInitializedDltTopic() {
+    NewTopic projectInitializedDltTopic() {
         return TopicBuilder
             .name(PROJECT_INITIALIZED_DLT)
             .partitions(1)
@@ -58,7 +58,7 @@ public class KafkaTopicConfig {
     }
 
     @Bean
-    public NewTopic codeGeneratedDltTopic() {
+    NewTopic codeGeneratedDltTopic() {
         return TopicBuilder
             .name(CODE_GENERATED_DLT)
             .partitions(1)
@@ -67,7 +67,7 @@ public class KafkaTopicConfig {
     }
 
     @Bean
-    public NewTopic deploymentReadyDltTopic() {
+    NewTopic deploymentReadyDltTopic() {
         return TopicBuilder
             .name(DEPLOYMENT_READY_DLT)
             .partitions(1)

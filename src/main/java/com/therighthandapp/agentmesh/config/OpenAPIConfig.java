@@ -18,27 +18,31 @@ import java.util.List;
 public class OpenAPIConfig {
 
     @Bean
-    public OpenAPI agentMeshOpenAPI() {
+    OpenAPI agentMeshOpenAPI() {
         return new OpenAPI()
             .info(new Info()
                 .title("AgentMesh API")
-                .description("Multi-Tenant Agentic AI Platform with Blackboard Architecture\n\n" +
-                    "## Features\n" +
-                    "- **Multi-Tenant Architecture**: Complete tenant isolation with RBAC/ABAC\n" +
-                    "- **Blackboard Pattern**: Shared knowledge space for agent collaboration\n" +
-                    "- **MAST Framework**: Multi-Agent Self-Correction with quality assurance\n" +
-                    "- **LoRA Support**: Tenant-specific model customization\n" +
-                    "- **Billing System**: Outcome-based and token-based pricing\n" +
-                    "- **Vector RAG**: Semantic search with Weaviate integration\n" +
-                    "- **Orchestration**: Temporal workflows for complex tasks\n\n" +
-                    "## Multi-Tenancy\n" +
-                    "All API operations support multi-tenancy via TenantContext. " +
-                    "Set tenant/project context via authentication headers.\n\n" +
-                    "## Tiers\n" +
-                    "- **FREE**: Limited usage, $0/month\n" +
-                    "- **STANDARD**: 10 projects, 50 agents\n" +
-                    "- **PREMIUM**: 50 projects, 200 agents, 20% discount\n" +
-                    "- **ENTERPRISE**: Unlimited, 30% discount, custom pricing")
+                .description("""
+                    Multi-Tenant Agentic AI Platform with Blackboard Architecture
+                    
+                    ## Features
+                    - **Multi-Tenant Architecture**: Complete tenant isolation with RBAC/ABAC
+                    - **Blackboard Pattern**: Shared knowledge space for agent collaboration
+                    - **MAST Framework**: Multi-Agent Self-Correction with quality assurance
+                    - **LoRA Support**: Tenant-specific model customization
+                    - **Billing System**: Outcome-based and token-based pricing
+                    - **Vector RAG**: Semantic search with Weaviate integration
+                    - **Orchestration**: Temporal workflows for complex tasks
+                    
+                    ## Multi-Tenancy
+                    All API operations support multi-tenancy via TenantContext. \
+                    Set tenant/project context via authentication headers.
+                    
+                    ## Tiers
+                    - **FREE**: Limited usage, $0/month
+                    - **STANDARD**: 10 projects, 50 agents
+                    - **PREMIUM**: 50 projects, 200 agents, 20% discount
+                    - **ENTERPRISE**: Unlimited, 30% discount, custom pricing""")
                 .version("1.0.0-Phase3")
                 .contact(new Contact()
                     .name("AgentMesh Team")

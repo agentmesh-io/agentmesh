@@ -2,7 +2,8 @@ package com.therighthandapp.agentmesh.llm;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.annotation.Primary;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -11,9 +12,15 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Mock LLM implementation for deterministic testing.
  * Records calls and returns pre-configured responses.
+ *
+ * Only active when ollama is disabled (fallback).
  */
 @Component
-@Primary
+@ConditionalOnProperty(
+    name = "agentmesh.llm.ollama.enabled",
+    havingValue = "false",
+    matchIfMissing = true
+)
 public class MockLLMClient implements LLMClient {
     private static final Logger log = LoggerFactory.getLogger(MockLLMClient.class);
 
@@ -133,10 +140,23 @@ public class MockLLMClient implements LLMClient {
     private String generateContextualResponse(String systemMessage, String userMessage) {
         String lowerSystem = systemMessage.toLowerCase();
         String lowerUser = userMessage.toLowerCase();
+        String combined = lowerSystem + " " + lowerUser;
+        
+        // Execution Plan generation request - check this FIRST (most specific)
+        if (combined.contains("execution plan") || combined.contains("expert software architect") ||
+            combined.contains("implementation plan") || combined.contains("task breakdown")) {
+            return generateMockExecutionPlan(userMessage);
+        }
+        
+        // Review request - check BEFORE test (review prompts may contain "test" in metrics)
+        if (lowerSystem.contains("code review") || lowerSystem.contains("reviewer") || 
+            combined.contains("review report") || combined.contains("code reviewer")) {
+            return generateMockReview(userMessage);
+        }
         
         // Test generation request - check for test engineer or test generation keywords
-        if ((lowerSystem.contains("test") && (lowerSystem.contains("engineer") || lowerSystem.contains("generat"))) 
-            || lowerUser.contains("generate") && lowerUser.contains("test")) {
+        if ((combined.contains("test") && (combined.contains("engineer") || combined.contains("generat"))) 
+            || (lowerUser.contains("generate") && lowerUser.contains("test"))) {
             return generateMockTestCode(userMessage);
         }
         
@@ -146,18 +166,176 @@ public class MockLLMClient implements LLMClient {
             return generateMockCode(userMessage);
         }
         
-        // Review request
+        // Review request (fallback with more generic matching)
         if (lowerSystem.contains("review") || lowerSystem.contains("quality") || lowerUser.contains("review")) {
             return generateMockReview(userMessage);
         }
         
         // SRS/Requirements generation
-        if (lowerSystem.contains("architect") || lowerSystem.contains("srs") || lowerUser.contains("create an srs")) {
+        if (lowerSystem.contains("srs") || lowerUser.contains("create an srs")) {
             return generateMockSRS(userMessage);
         }
         
         // Default response
         return defaultResponse;
+    }
+    
+    private String generateMockExecutionPlan(String userMessage) {
+        String projectName = extractProjectName(userMessage);
+        String planId = java.util.UUID.randomUUID().toString();
+        String timestamp = java.time.LocalDateTime.now().toString();
+        
+        // Generate JSON matching ExecutionPlan domain class exactly:
+        // - FileDefinition: path, purpose, type (enum), dependencies, requirements
+        // - Module: name, description, priority, techStack, files, dependencies, configuration
+        // - FileStructure: rootDirectory, directories (Map)
+        // - TestingStrategy: targetCoveragePercent, testingFrameworks, testCategories, criticalPaths
+        // - TechStack: primaryLanguages, frameworks, libraries, databases, infrastructure
+        return """
+               {
+                 "planId": "%s",
+                 "srsId": "mock-srs-001",
+                 "srsUrl": "http://mock-auto-bads/srs/mock-srs-001",
+                 "projectTitle": "%s",
+                 "generatedAt": "%s",
+                 "modules": [
+                   {
+                     "name": "core",
+                     "description": "Core business logic module",
+                     "priority": "HIGH",
+                     "techStack": ["Java", "Spring Boot"],
+                     "dependencies": [],
+                     "configuration": {},
+                     "files": [
+                       {
+                         "path": "src/main/java/com/example/Application.java",
+                         "purpose": "Main application entry point",
+                         "type": "SOURCE_CODE",
+                         "dependencies": ["org.springframework.boot.SpringApplication"],
+                         "requirements": ["FR-001"]
+                       },
+                       {
+                         "path": "src/main/java/com/example/service/MainService.java",
+                         "purpose": "Main service implementation",
+                         "type": "SOURCE_CODE",
+                         "dependencies": ["org.springframework.stereotype.Service"],
+                         "requirements": ["FR-002"]
+                       },
+                       {
+                         "path": "src/main/java/com/example/controller/ApiController.java",
+                         "purpose": "REST API controller",
+                         "type": "SOURCE_CODE",
+                         "dependencies": ["org.springframework.web.bind.annotation.RestController"],
+                         "requirements": ["FR-003"]
+                       }
+                     ]
+                   },
+                   {
+                     "name": "api",
+                     "description": "REST API module",
+                     "priority": "MEDIUM",
+                     "techStack": ["Java", "Spring Web"],
+                     "dependencies": ["core"],
+                     "configuration": {},
+                     "files": [
+                       {
+                         "path": "src/main/java/com/example/api/RestEndpoint.java",
+                         "purpose": "REST endpoint definitions",
+                         "type": "SOURCE_CODE",
+                         "dependencies": ["org.springframework.web.bind.annotation.RequestMapping"],
+                         "requirements": ["FR-004"]
+                       }
+                     ]
+                   }
+                 ],
+                 "fileStructure": {
+                   "rootDirectory": "src/main/java",
+                   "directories": {
+                     "com": {
+                       "name": "com",
+                       "purpose": "Root package",
+                       "files": [],
+                       "subdirectories": {
+                         "example": {
+                           "name": "example",
+                           "purpose": "Main package",
+                           "files": ["Application.java"],
+                           "subdirectories": {}
+                         }
+                       }
+                     }
+                   }
+                 },
+                 "testingStrategy": {
+                   "targetCoveragePercent": 80,
+                   "testingFrameworks": ["JUnit5", "Mockito", "SpringBootTest"],
+                   "testCategories": [
+                     {
+                       "name": "Unit Tests",
+                       "description": "Tests for individual components",
+                       "estimatedTestCount": 10
+                     },
+                     {
+                       "name": "Integration Tests",
+                       "description": "Tests for component interactions",
+                       "estimatedTestCount": 5
+                     }
+                   ],
+                   "criticalPaths": ["API endpoints", "Service layer"]
+                 },
+                 "techStack": {
+                   "primaryLanguages": ["Java"],
+                   "frameworks": ["Spring Boot 3.2"],
+                   "libraries": ["Lombok", "Jackson"],
+                   "databases": ["PostgreSQL"],
+                   "infrastructure": ["Docker", "Maven"]
+                 },
+                 "effortEstimate": {
+                   "totalHours": 40,
+                   "hoursByModule": {
+                     "core": 20,
+                     "api": 20
+                   },
+                   "estimatedLinesOfCode": 500,
+                   "phases": [
+                     {
+                       "name": "Setup",
+                       "durationDays": 1,
+                       "tasks": ["Project setup", "Configure dependencies"]
+                     },
+                     {
+                       "name": "Development",
+                       "durationDays": 3,
+                       "tasks": ["Implement core", "Implement API"]
+                     },
+                     {
+                       "name": "Testing",
+                       "durationDays": 1,
+                       "tasks": ["Unit tests", "Integration tests"]
+                     }
+                   ]
+                 },
+                 "metadata": {
+                   "generatorVersion": "1.0.0",
+                   "mockGenerated": "true"
+                 }
+               }
+               """.formatted(planId, projectName, timestamp);
+    }
+    
+    private String extractProjectName(String userMessage) {
+        // Try to extract project name from user message
+        if (userMessage.contains("projectName")) {
+            int start = userMessage.indexOf("projectName");
+            int colonIndex = userMessage.indexOf(":", start);
+            if (colonIndex > 0) {
+                int endQuote = userMessage.indexOf("\"", colonIndex + 2);
+                if (endQuote > colonIndex) {
+                    return userMessage.substring(colonIndex + 2, endQuote);
+                }
+            }
+        }
+        return "MockProject";
     }
     
     private String generateMockSRS(String userMessage) {
@@ -177,9 +355,11 @@ public class MockLLMClient implements LLMClient {
     private String generateMockCode(String userMessage) {
         // Check for hello world request
         if (userMessage.toLowerCase().contains("hello")) {
-            return "public void helloWorld() {\n" +
-                   "    System.out.println(\"Hello, World!\");\n" +
-                   "}";
+            return """
+                   public void helloWorld() {
+                       System.out.println("Hello, World!");
+                   }\
+                   """;
         }
         
         return "public class MockGeneratedCode {\n" +
@@ -199,78 +379,115 @@ public class MockLLMClient implements LLMClient {
     }
     
     private String generateMockReview(String userMessage) {
-        return "# Code Review Report\n\n" +
-               "## Status: APPROVED\n\n" +
-               "## Issues Found: 2\n\n" +
-               "### Issue 1: Missing null checks\n" +
-               "- Severity: MEDIUM\n" +
-               "- Location: Line 15\n" +
-               "- Recommendation: Add null validation\n\n" +
-               "### Issue 2: Optimize database queries\n" +
-               "- Severity: LOW\n" +
-               "- Location: Line 42\n" +
-               "- Recommendation: Use batch operations\n\n" +
-               "## Score: 8/10\n" +
-               "Overall code quality is good with minor improvements needed.";
+        // Return JSON matching what ReviewParser expects
+        return """
+               {
+                 "overallScore": 8,
+                 "qualityIssues": [
+                   {
+                     "severity": "MEDIUM",
+                     "category": "NULL_CHECK",
+                     "description": "Missing null checks in service methods",
+                     "location": "MainService.java:15",
+                     "suggestion": "Add null validation for input parameters"
+                   }
+                 ],
+                 "securityIssues": [],
+                 "bestPracticeViolations": [
+                   {
+                     "rule": "SOLID_PRINCIPLES",
+                     "description": "Consider extracting business logic into separate service",
+                     "severity": "LOW",
+                     "location": "ApiController.java:30"
+                   }
+                 ],
+                 "suggestions": [
+                   {
+                     "type": "PERFORMANCE",
+                     "description": "Consider using batch operations for database queries",
+                     "priority": "MEDIUM",
+                     "estimatedImpact": "Improve response time by 20%"
+                   }
+                 ],
+                 "codeMetrics": {
+                   "linesOfCode": 150,
+                   "cyclomaticComplexity": 5,
+                   "testCoverage": 75.0,
+                   "duplicatePercentage": 2.0
+                 },
+                 "complexityAnalysis": {
+                   "overallComplexity": "LOW",
+                   "hotspots": [],
+                   "recommendations": ["Code structure is clean and maintainable"]
+                 },
+                 "approved": true,
+                 "summary": "Code quality is good with minor improvements needed. Approved for deployment."
+               }
+               """;
     }
     
     private String generateMockTestCode(String userMessage) {
-        return "@Test\n" +
-               "public void testCrudOperations() {\n" +
-               "    // Arrange\n" +
-               "    Entity entity = new Entity();\n" +
-               "    entity.setId(1L);\n" +
-               "    entity.setName(\"Test\");\n" +
-               "    \n" +
-               "    // Act\n" +
-               "    repository.save(entity);\n" +
-               "    Entity result = repository.findById(1L).get();\n" +
-               "    \n" +
-               "    // Assert\n" +
-               "    assertNotNull(result);\n" +
-               "    assertEquals(\"Test\", result.getName());\n" +
-               "    \n" +
-               "    // Update test\n" +
-               "    result.setName(\"Updated\");\n" +
-               "    repository.save(result);\n" +
-               "    Entity updated = repository.findById(1L).get();\n" +
-               "    assertEquals(\"Updated\", updated.getName());\n" +
-               "    \n" +
-               "    // Delete test\n" +
-               "    repository.deleteById(1L);\n" +
-               "    assertFalse(repository.findById(1L).isPresent());\n" +
-               "}\n\n" +
-               "@Test\n" +
-               "public void testValidation() {\n" +
-               "    // Test input validation\n" +
-               "    Entity invalid = new Entity();\n" +
-               "    assertThrows(ValidationException.class, () -> {\n" +
-               "        repository.save(invalid);\n" +
-               "    });\n" +
-               "}\n\n" +
-               "@Test\n" +
-               "public void testErrorHandling() {\n" +
-               "    // Test error scenarios\n" +
-               "    assertThrows(NotFoundException.class, () -> {\n" +
-               "        repository.findById(999L).orElseThrow();\n" +
-               "    });\n" +
-               "}\n\n" +
-               "@Test\n" +
-               "public void testConcurrency() {\n" +
-               "    // Test concurrent access\n" +
-               "    Entity entity = new Entity();\n" +
-               "    entity.setId(2L);\n" +
-               "    repository.save(entity);\n" +
-               "    \n" +
-               "    CountDownLatch latch = new CountDownLatch(10);\n" +
-               "    for (int i = 0; i < 10; i++) {\n" +
-               "        new Thread(() -> {\n" +
-               "            repository.findById(2L);\n" +
-               "            latch.countDown();\n" +
-               "        }).start();\n" +
-               "    }\n" +
-               "    latch.await();\n" +
-               "}";
+        return """
+               @Test
+               public void testCrudOperations() {
+                   // Arrange
+                   Entity entity = new Entity();
+                   entity.setId(1L);
+                   entity.setName("Test");
+                  \s
+                   // Act
+                   repository.save(entity);
+                   Entity result = repository.findById(1L).get();
+                  \s
+                   // Assert
+                   assertNotNull(result);
+                   assertEquals("Test", result.getName());
+                  \s
+                   // Update test
+                   result.setName("Updated");
+                   repository.save(result);
+                   Entity updated = repository.findById(1L).get();
+                   assertEquals("Updated", updated.getName());
+                  \s
+                   // Delete test
+                   repository.deleteById(1L);
+                   assertFalse(repository.findById(1L).isPresent());
+               }
+               
+               @Test
+               public void testValidation() {
+                   // Test input validation
+                   Entity invalid = new Entity();
+                   assertThrows(ValidationException.class, () -> {
+                       repository.save(invalid);
+                   });
+               }
+               
+               @Test
+               public void testErrorHandling() {
+                   // Test error scenarios
+                   assertThrows(NotFoundException.class, () -> {
+                       repository.findById(999L).orElseThrow();
+                   });
+               }
+               
+               @Test
+               public void testConcurrency() {
+                   // Test concurrent access
+                   Entity entity = new Entity();
+                   entity.setId(2L);
+                   repository.save(entity);
+                  \s
+                   CountDownLatch latch = new CountDownLatch(10);
+                   for (int i = 0; i < 10; i++) {
+                       new Thread(() -> {
+                           repository.findById(2L);
+                           latch.countDown();
+                       }).start();
+                   }
+                   latch.await();
+               }\
+               """;
     }
 
     // Test utility methods

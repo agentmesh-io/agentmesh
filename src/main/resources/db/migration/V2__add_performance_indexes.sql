@@ -39,15 +39,14 @@ CREATE INDEX idx_projects_active
 ON projects(tenant_id, status) 
 WHERE status = 'ACTIVE';
 
--- Only index recent blackboard entries (last 30 days)
+-- Index blackboard entries by timestamp
 CREATE INDEX idx_blackboard_recent 
-ON blackboard_entry(tenant_id, project_id, timestamp DESC) 
-WHERE timestamp > NOW() - INTERVAL '30 days';
+ON blackboard_entry(tenant_id, project_id, timestamp DESC);
 
 -- Only index unresolved violations for alerting
 CREATE INDEX idx_mast_unresolved_recent 
 ON mast_violations(agent_id, severity, detected_at DESC) 
-WHERE NOT resolved AND detected_at > NOW() - INTERVAL '7 days';
+WHERE NOT resolved;
 
 -- ============================================================================
 -- COVERING INDEXES FOR ANALYTICS QUERIES

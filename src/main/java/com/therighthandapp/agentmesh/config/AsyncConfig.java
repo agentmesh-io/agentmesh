@@ -37,7 +37,7 @@ public class AsyncConfig {
      * @return Configured executor for @Async("mastExecutor") tasks
      */
     @Bean(name = "mastExecutor")
-    public Executor mastExecutor() {
+    Executor mastExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         
         // Core pool size - always active threads
@@ -65,6 +65,27 @@ public class AsyncConfig {
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(60);
         
+        executor.initialize();
+        return executor;
+    }
+
+    /**
+     * Thread pool executor for workflow execution tasks.
+     * Separate from MAST to avoid contention.
+     */
+    @Bean(name = "workflowExecutor")
+    Executor workflowExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(5);
+        executor.setMaxPoolSize(20);
+        executor.setQueueCapacity(50);
+        executor.setThreadNamePrefix("Workflow-Async-");
+        executor.setKeepAliveSeconds(120);
+        executor.setRejectedExecutionHandler(
+                new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy()
+        );
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(120);
         executor.initialize();
         return executor;
     }

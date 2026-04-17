@@ -155,7 +155,7 @@ public enum MASTFailureMode {
 
     @Override
     public String toString() {
-        return String.format("%s: %s - %s", code, name, description);
+        return "%s: %s - %s".formatted(code, name, description);
     }
 }
 
