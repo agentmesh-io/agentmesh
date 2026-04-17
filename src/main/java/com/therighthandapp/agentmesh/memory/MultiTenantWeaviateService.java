@@ -221,6 +221,239 @@ public class MultiTenantWeaviateService {
     }
 
     /**
+     * Hybrid search combining BM25 keyword matching with vector similarity
+     * 
+     * @param query Search query string
+     * @param limit Maximum number of results
+     * @param alpha Balance between keyword (0.0) and vector (1.0) search. 
+     *              0.5 = balanced, 0.0 = pure BM25, 1.0 = pure vector
+     * @param agentId Agent performing the search (for MAST tracking)
+     * @return List of matching artifacts ranked by hybrid score
+     */
+    public List<MemoryArtifact> hybridSearch(String query, int limit, double alpha, String agentId) {
+        if (!weaviateEnabled || client == null) {
+            log.debug("Weaviate disabled, returning empty search results");
+            return Collections.emptyList();
+        }
+        
+        // Track memory query for MAST context loss detection
+        if (mastDetector != null && agentId != null) {
+            mastDetector.trackMemoryQuery(agentId);
+        }
+
+        // Validate alpha parameter
+        if (alpha < 0.0 || alpha > 1.0) {
+            log.warn("Alpha must be between 0.0 and 1.0, defaulting to 0.75");
+            alpha = 0.75;
+        }
+
+        // Get tenant context for namespace filtering
+        String namespace = null;
+        String tenantId = null;
+        String projectId = null;
+
+        if (multitenancyEnabled) {
+            TenantContext context = TenantContext.getOrNull();
+            if (context != null) {
+                namespace = context.getVectorNamespace();
+                tenantId = context.getTenantId();
+                projectId = context.getProjectId();
+
+                // Enforce access control
+                if (accessControl != null) {
+                    accessControl.checkAccess(tenantId, projectId);
+                }
+
+                log.debug("Hybrid searching in namespace: {} with alpha: {}", namespace, alpha);
+            }
+        }
+
+        try {
+            Field[] fields = new Field[]{
+                Field.builder().name("title").build(),
+                Field.builder().name("content").build(),
+                Field.builder().name("artifactType").build(),
+                Field.builder().name("agentId").build(),
+                Field.builder().name("tenantId").build(),
+                Field.builder().name("projectId").build(),
+                Field.builder().name("vectorNamespace").build(),
+                Field.builder().name("_additional").fields(
+                    new Field[]{Field.builder().name("score").build()}
+                ).build()
+            };
+
+            // Weaviate hybrid search uses alpha parameter to balance keyword vs vector
+            io.weaviate.client.v1.graphql.query.argument.HybridArgument hybridArg = 
+                io.weaviate.client.v1.graphql.query.argument.HybridArgument.builder()
+                    .query(query)
+                    .alpha((float) alpha)
+                    .build();
+
+            // Build query with hybrid search
+            var queryBuilder = client.graphQL()
+                .get()
+                .withClassName(SCHEMA_CLASS)
+                .withFields(fields)
+                .withHybrid(hybridArg)
+                .withLimit(limit);
+
+            // Add namespace filter for multi-tenancy
+            if (namespace != null) {
+                WhereFilter filter = WhereFilter.builder()
+                    .path(new String[]{"vectorNamespace"})
+                    .operator(Operator.Equal)
+                    .valueText(namespace)
+                    .build();
+                queryBuilder = queryBuilder.withWhere(filter);
+            }
+
+            Result<GraphQLResponse> result = queryBuilder.run();
+
+            if (result.hasErrors()) {
+                log.error("Error in hybrid search: {}", result.getError());
+                return Collections.emptyList();
+            }
+
+            return parseSearchResults(result.getResult());
+
+        } catch (Exception e) {
+            log.error("Failed to execute hybrid search", e);
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * Advanced search with metadata filtering
+     * 
+     * @param query Search query string
+     * @param limit Maximum number of results
+     * @param filters Metadata filters (artifactType, agentId, dateRange, etc.)
+     * @param useHybrid If true, uses hybrid search; otherwise pure vector search
+     * @param alpha Hybrid search balance (only used if useHybrid=true)
+     * @param agentId Agent performing the search (for MAST tracking)
+     * @return List of matching artifacts
+     */
+    public List<MemoryArtifact> searchWithFilters(String query, int limit, 
+                                                   Map<String, Object> filters,
+                                                   boolean useHybrid, double alpha,
+                                                   String agentId) {
+        if (!weaviateEnabled || client == null) {
+            log.debug("Weaviate disabled, returning empty search results");
+            return Collections.emptyList();
+        }
+        
+        // Track memory query for MAST context loss detection
+        if (mastDetector != null && agentId != null) {
+            mastDetector.trackMemoryQuery(agentId);
+        }
+
+        // Get tenant context
+        String namespace = null;
+        if (multitenancyEnabled) {
+            TenantContext context = TenantContext.getOrNull();
+            if (context != null) {
+                namespace = context.getVectorNamespace();
+                if (accessControl != null) {
+                    accessControl.checkAccess(context.getTenantId(), context.getProjectId());
+                }
+            }
+        }
+
+        try {
+            Field[] fields = new Field[]{
+                Field.builder().name("title").build(),
+                Field.builder().name("content").build(),
+                Field.builder().name("artifactType").build(),
+                Field.builder().name("agentId").build(),
+                Field.builder().name("tenantId").build(),
+                Field.builder().name("projectId").build(),
+                Field.builder().name("vectorNamespace").build()
+            };
+
+            // Start query builder
+            var queryBuilder = client.graphQL()
+                .get()
+                .withClassName(SCHEMA_CLASS)
+                .withFields(fields)
+                .withLimit(limit);
+
+            // Add search type (hybrid or vector)
+            if (useHybrid) {
+                io.weaviate.client.v1.graphql.query.argument.HybridArgument hybridArg = 
+                    io.weaviate.client.v1.graphql.query.argument.HybridArgument.builder()
+                        .query(query)
+                        .alpha((float) alpha)
+                        .build();
+                queryBuilder = queryBuilder.withHybrid(hybridArg);
+            } else {
+                NearTextArgument nearText = NearTextArgument.builder()
+                    .concepts(new String[]{query})
+                    .build();
+                queryBuilder = queryBuilder.withNearText(nearText);
+            }
+
+            // Build composite filter
+            List<WhereFilter> whereFilters = new ArrayList<>();
+
+            // Namespace filter (always apply for multi-tenancy)
+            if (namespace != null) {
+                whereFilters.add(WhereFilter.builder()
+                    .path(new String[]{"vectorNamespace"})
+                    .operator(Operator.Equal)
+                    .valueText(namespace)
+                    .build());
+            }
+
+            // Apply user-provided filters
+            if (filters != null && !filters.isEmpty()) {
+                if (filters.containsKey("artifactType")) {
+                    whereFilters.add(WhereFilter.builder()
+                        .path(new String[]{"artifactType"})
+                        .operator(Operator.Equal)
+                        .valueText((String) filters.get("artifactType"))
+                        .build());
+                }
+
+                if (filters.containsKey("agentId")) {
+                    whereFilters.add(WhereFilter.builder()
+                        .path(new String[]{"agentId"})
+                        .operator(Operator.Equal)
+                        .valueText((String) filters.get("agentId"))
+                        .build());
+                }
+
+                // Add more filters as needed (projectId, dateRange, etc.)
+            }
+
+            // Combine filters with AND operator
+            if (!whereFilters.isEmpty()) {
+                if (whereFilters.size() == 1) {
+                    queryBuilder = queryBuilder.withWhere(whereFilters.get(0));
+                } else {
+                    WhereFilter combinedFilter = WhereFilter.builder()
+                        .operator(Operator.And)
+                        .operands(whereFilters.toArray(new WhereFilter[0]))
+                        .build();
+                    queryBuilder = queryBuilder.withWhere(combinedFilter);
+                }
+            }
+
+            Result<GraphQLResponse> result = queryBuilder.run();
+
+            if (result.hasErrors()) {
+                log.error("Error in filtered search: {}", result.getError());
+                return Collections.emptyList();
+            }
+
+            return parseSearchResults(result.getResult());
+
+        } catch (Exception e) {
+            log.error("Failed to execute filtered search", e);
+            return Collections.emptyList();
+        }
+    }
+
+    /**
      * Get artifacts by type with tenant filtering
      */
     public List<MemoryArtifact> getByType(String artifactType) {

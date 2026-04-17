@@ -1,0 +1,136 @@
+{
+  "dashboard": {
+    "title": "AgentMesh - System Overview",
+    "tags": ["agentmesh", "overview"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Agent Tasks - Total & Success Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(agentmesh_agent_tasks_total{application=\"agentmesh\"}[5m])",
+            "legendFormat": "Total Tasks"
+          },
+          {
+            "expr": "rate(agentmesh_agent_tasks_success_total{application=\"agentmesh\"}[5m])",
+            "legendFormat": "Successful Tasks"
+          },
+          {
+            "expr": "rate(agentmesh_agent_tasks_failure_total{application=\"agentmesh\"}[5m])",
+            "legendFormat": "Failed Tasks"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Agent Execution Duration",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.99, rate(agentmesh_agent_execution_duration_seconds_bucket[5m]))",
+            "legendFormat": "p99"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(agentmesh_agent_execution_duration_seconds_bucket[5m]))",
+            "legendFormat": "p95"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(agentmesh_agent_execution_duration_seconds_bucket[5m]))",
+            "legendFormat": "p50"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Agent Tasks by Type",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(agentmesh_agent_tasks_started_total{application=\"agentmesh\"}[5m])",
+            "legendFormat": "{{agent_type}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+      },
+      {
+        "id": 4,
+        "title": "Blackboard Activity",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(agentmesh_blackboard_posts_total{application=\"agentmesh\"}[5m])",
+            "legendFormat": "Posts/sec"
+          },
+          {
+            "expr": "rate(agentmesh_blackboard_queries_total{application=\"agentmesh\"}[5m])",
+            "legendFormat": "Queries/sec"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      },
+      {
+        "id": 5,
+        "title": "Memory Operations",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(agentmesh_memory_operations_total{application=\"agentmesh\"}[5m])",
+            "legendFormat": "Total Ops"
+          },
+          {
+            "expr": "rate(agentmesh_memory_hybrid_search_total{application=\"agentmesh\"}[5m])",
+            "legendFormat": "Hybrid Searches"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+      },
+      {
+        "id": 6,
+        "title": "MAST Violations",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(agentmesh_mast_violations_total{application=\"agentmesh\"}[5m])",
+            "legendFormat": "{{failure_mode}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+      },
+      {
+        "id": 7,
+        "title": "LLM Calls & Token Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(agentmesh_llm_calls_total{application=\"agentmesh\"}[5m])",
+            "legendFormat": "LLM Calls/sec"
+          },
+          {
+            "expr": "rate(agentmesh_llm_tokens_total{application=\"agentmesh\"}[5m])",
+            "legendFormat": "Tokens/sec"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24}
+      },
+      {
+        "id": 8,
+        "title": "Self-Correction Success Rate",
+        "type": "singlestat",
+        "targets": [
+          {
+            "expr": "rate(agentmesh_selfcorrection_successes_total{application=\"agentmesh\"}[5m]) / rate(agentmesh_selfcorrection_attempts_total{application=\"agentmesh\"}[5m]) * 100",
+            "legendFormat": "Success %"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24}
+      }
+    ],
+    "refresh": "10s",
+    "schemaVersion": 16,
+    "version": 1
+  }
+}

@@ -1,0 +1,112 @@
+---
+# Staging Environment Configuration
+# Pre-production testing with production-like settings
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: agentmesh-staging
+
+# Reference base configuration
+resources:
+- ../../base
+
+# Staging-specific labels
+commonLabels:
+  environment: staging
+  tier: staging
+
+# ConfigMap overrides for staging
+configMapGenerator:
+- name: agentmesh-config
+  behavior: merge
+  literals:
+  - SPRING_PROFILES_ACTIVE=staging
+  - LOGGING_LEVEL_ROOT=INFO
+  - LOGGING_LEVEL_COM_THERIGHTHANDAPP=DEBUG
+  - CACHE_TTL_VIOLATION=7200      # 2 hours (production setting)
+  - CACHE_TTL_BLACKBOARD=1800     # 30 minutes (production setting)
+  - MAST_ASYNC_ENABLED=true       # Production mode
+  - SELFCORRECTION_MAX_ATTEMPTS=3 # Production setting
+  - DATABASE_POOL_SIZE=20         # Production-like pool
+  - REDIS_MAX_CONNECTIONS=50      # Production-like pool
+  - LLM_MAX_CONCURRENT=10         # Production concurrency
+  - LLM_TIMEOUT_SECONDS=60        # Production timeout
+  - METRICS_EXPORT_INTERVAL=30s   # Production interval
+
+# Staging secrets (use external secret management in real deployment)
+secretGenerator:
+- name: agentmesh-secrets
+  behavior: replace
+  literals:
+  - DATABASE_PASSWORD=staging_secure_password_456
+  - REDIS_PASSWORD=staging_redis_456
+  - LLM_API_KEY=sk-staging-placeholder
+  - WEAVIATE_API_KEY=staging-weaviate-key
+
+- name: postgres-secrets
+  behavior: replace
+  literals:
+  - POSTGRES_PASSWORD=staging_secure_password_456
+  - POSTGRES_USER=agentmesh_staging
+  - POSTGRES_DB=agentmesh_staging
+
+# Resource adjustments for staging (production-like)
+replicas:
+- name: agentmesh
+  count: 3  # HA setup
+
+- name: postgres
+  count: 1  # Single instance (use managed DB in production)
+
+- name: redis-cluster
+  count: 6  # Full cluster (3 masters + 3 replicas)
+
+- name: kafka
+  count: 3  # Full cluster
+
+# Staging resources (80% of production)
+patches:
+- patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/requests/memory
+      value: 1.6Gi
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/requests/cpu
+      value: 800m
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/limits/memory
+      value: 3.2Gi
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/limits/cpu
+      value: 1600m
+  target:
+    kind: Deployment
+    name: agentmesh
+
+# HPA settings for staging
+- patch: |-
+    - op: replace
+      path: /spec/minReplicas
+      value: 2
+    - op: replace
+      path: /spec/maxReplicas
+      value: 6
+    - op: replace
+      path: /spec/metrics/0/resource/target/averageUtilization
+      value: 70
+  target:
+    kind: HorizontalPodAutoscaler
+    name: agentmesh-hpa
+
+# Staging-specific annotations
+commonAnnotations:
+  agentmesh.io/environment: staging
+  agentmesh.io/backup-enabled: "true"
+  agentmesh.io/monitoring-level: production
+
+# Use stable release tags in staging
+images:
+- name: agentmesh
+  newName: agentmesh/agentmesh
+  newTag: v1.0.0-rc

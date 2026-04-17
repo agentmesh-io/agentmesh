@@ -1,16 +1,19 @@
 package com.therighthandapp.agentmesh.api;
 
 import com.therighthandapp.agentmesh.AgentMeshApplication;
+import com.therighthandapp.agentmesh.blackboard.BlackboardEntry;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.*;
+import org.springframework.test.context.ActiveProfiles;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(classes = AgentMeshApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@ActiveProfiles("test")
 public class BlackboardControllerIntegrationTest {
 
     @LocalServerPort

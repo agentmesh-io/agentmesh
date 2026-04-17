@@ -1,0 +1,200 @@
+{
+  "dashboard": {
+    "title": "AgentMesh - MAST Violations & Health",
+    "tags": ["agentmesh", "mast", "health"],
+    "timezone": "browser",
+    "refresh": "30s",
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "MAST Violations per Minute",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "agentmesh:mast:violations_per_minute",
+            "legendFormat": "Total Violations/min"
+          },
+          {
+            "expr": "agentmesh:mast:critical_violations_per_minute",
+            "legendFormat": "Critical/min"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Violations/min"},
+          {"format": "short"}
+        ],
+        "alert": {
+          "conditions": [{
+            "evaluator": {"params": [10], "type": "gt"},
+            "operator": {"type": "and"},
+            "query": {"params": ["A", "5m", "now"]},
+            "reducer": {"params": [], "type": "avg"},
+            "type": "query"
+          }],
+          "frequency": "1m",
+          "name": "High MAST Violations",
+          "message": "MAST violations exceeding threshold"
+        }
+      },
+      {
+        "id": 2,
+        "title": "Violations by Failure Mode",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "targets": [{
+          "expr": "sum by (mode) (rate(agentmesh_mast_violations_by_mode[5m]))",
+          "legendFormat": "{{mode}}"
+        }],
+        "yaxes": [
+          {"format": "ops", "label": "Violations/s"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Violations by Category",
+        "type": "piechart",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "targets": [{
+          "expr": "sum by (category) (agentmesh_mast_violations_total)",
+          "legendFormat": "{{category}}"
+        }]
+      },
+      {
+        "id": 4,
+        "title": "Top 10 Violation Modes (Last Hour)",
+        "type": "table",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+        "targets": [{
+          "expr": "topk(10, sum by (mode) (increase(agentmesh_mast_violations_by_mode[1h])))",
+          "format": "table",
+          "instant": true
+        }],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "renameByName": {
+                "mode": "Failure Mode",
+                "Value": "Count"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Severity Distribution",
+        "type": "bargauge",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+        "targets": [{
+          "expr": "sum by (severity) (agentmesh_mast_violations_by_severity)",
+          "legendFormat": "{{severity}}"
+        }],
+        "options": {
+          "orientation": "horizontal",
+          "displayMode": "gradient"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"},
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 5, "color": "yellow"},
+                {"value": 10, "color": "orange"},
+                {"value": 20, "color": "red"}
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {"id": "byName", "options": "CRITICAL"},
+              "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]
+            },
+            {
+              "matcher": {"id": "byName", "options": "HIGH"},
+              "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}]
+            },
+            {
+              "matcher": {"id": "byName", "options": "MEDIUM"},
+              "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "yellow"}}]
+            },
+            {
+              "matcher": {"id": "byName", "options": "LOW"},
+              "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]
+            }
+          ]
+        }
+      },
+      {
+        "id": 6,
+        "title": "Unresolved Violations Trend",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24},
+        "targets": [{
+          "expr": "agentmesh_mast_unresolved_violations",
+          "legendFormat": "Unresolved"
+        }],
+        "yaxes": [
+          {"format": "short", "label": "Count"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Self-Correction Success Rate",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 8, "x": 0, "y": 32},
+        "targets": [{
+          "expr": "agentmesh:selfcorrection:success_rate",
+          "legendFormat": "Success Rate %"
+        }],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "unit": "percent"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 70, "color": "yellow"},
+                {"value": 90, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 8,
+        "title": "Self-Correction Attempts",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 16, "x": 8, "y": 32},
+        "targets": [
+          {
+            "expr": "rate(agentmesh_selfcorrection_attempts_total[5m])",
+            "legendFormat": "Attempts/s"
+          },
+          {
+            "expr": "rate(agentmesh_selfcorrection_successes_total[5m])",
+            "legendFormat": "Success/s"
+          },
+          {
+            "expr": "rate(agentmesh_selfcorrection_failures_total[5m])",
+            "legendFormat": "Failures/s"
+          }
+        ]
+      }
+    ]
+  }
+}

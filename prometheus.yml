@@ -1,0 +1,104 @@
+# Prometheus configuration for AgentMesh monitoring
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'agentmesh-dev'
+    environment: 'development'
+
+scrape_configs:
+  # AgentMesh application metrics
+  - job_name: 'agentmesh'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['agentmesh:8080']
+        labels:
+          application: 'agentmesh'
+          service: 'backend'
+    
+    # Relabel configurations
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+      - source_labels: [__scheme__]
+        target_label: scheme
+
+  # Blackboard service metrics (if exposed separately)
+  - job_name: 'blackboard'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['agentmesh:8080']
+        labels:
+          component: 'blackboard'
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'agentmesh_blackboard_.*'
+        action: keep
+
+  # Memory service metrics (Weaviate)
+  - job_name: 'memory'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['agentmesh:8080']
+        labels:
+          component: 'memory'
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'agentmesh_memory_.*'
+        action: keep
+
+  # Agent execution metrics
+  - job_name: 'agents'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['agentmesh:8080']
+        labels:
+          component: 'agents'
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'agentmesh_agent_.*'
+        action: keep
+
+  # MAST metrics
+  - job_name: 'mast'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['agentmesh:8080']
+        labels:
+          component: 'mast'
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'agentmesh_mast_.*'
+        action: keep
+
+  # LLM metrics
+  - job_name: 'llm'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['agentmesh:8080']
+        labels:
+          component: 'llm'
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'agentmesh_llm_.*'
+        action: keep
+
+  # Self-correction metrics
+  - job_name: 'self-correction'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['agentmesh:8080']
+        labels:
+          component: 'self-correction'
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'agentmesh_selfcorrection_.*'
+        action: keep
+
+# Alerting rules (optional)
+# rule_files:
+#   - 'alerts.yml'
+
+# Remote write configuration (optional - for long-term storage)
+# remote_write:
+#   - url: "http://victoriametrics:8428/api/v1/write"

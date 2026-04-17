@@ -1,0 +1,253 @@
+---
+# Istio Service Mesh Configuration for AgentMesh
+
+# Gateway for external traffic
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: agentmesh-gateway
+  namespace: agentmesh-prod
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  # HTTP redirect to HTTPS
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "agentmesh.example.com"
+    - "api.agentmesh.example.com"
+    tls:
+      httpsRedirect: true
+  
+  # HTTPS
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    hosts:
+    - "agentmesh.example.com"
+    - "api.agentmesh.example.com"
+    tls:
+      mode: SIMPLE
+      credentialName: agentmesh-tls-prod
+
+---
+# VirtualService for routing
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: agentmesh-vs
+  namespace: agentmesh-prod
+spec:
+  hosts:
+  - "agentmesh.example.com"
+  - "api.agentmesh.example.com"
+  gateways:
+  - agentmesh-gateway
+  http:
+  # API routes
+  - match:
+    - uri:
+        prefix: /api/v1/agents
+    - uri:
+        prefix: /api/v1/tenants
+    - uri:
+        prefix: /api/v1/blackboard
+    route:
+    - destination:
+        host: agentmesh-service
+        port:
+          number: 8080
+    retries:
+      attempts: 3
+      perTryTimeout: 10s
+      retryOn: 5xx,reset,connect-failure,refused-stream
+    timeout: 30s
+  
+  # Actuator endpoints (restricted)
+  - match:
+    - uri:
+        prefix: /actuator
+    route:
+    - destination:
+        host: agentmesh-service
+        port:
+          number: 8080
+    headers:
+      request:
+        add:
+          X-Internal-Request: "true"
+  
+  # Default route
+  - route:
+    - destination:
+        host: agentmesh-service
+        port:
+          number: 8080
+
+---
+# DestinationRule for load balancing and circuit breaking
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: agentmesh-dr
+  namespace: agentmesh-prod
+spec:
+  host: agentmesh-service
+  trafficPolicy:
+    # Connection pool settings
+    connectionPool:
+      tcp:
+        maxConnections: 100
+      http:
+        http1MaxPendingRequests: 50
+        http2MaxRequests: 100
+        maxRequestsPerConnection: 2
+    
+    # Load balancing
+    loadBalancer:
+      consistentHash:
+        httpHeaderName: X-Tenant-ID  # Session affinity by tenant
+    
+    # Circuit breaker
+    outlierDetection:
+      consecutiveErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+      minHealthPercent: 50
+  
+  # Subsets for canary deployments
+  subsets:
+  - name: v1
+    labels:
+      version: v1
+  - name: v2
+    labels:
+      version: v2
+  - name: canary
+    labels:
+      version: canary
+
+---
+# PeerAuthentication for mTLS
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: agentmesh-mtls
+  namespace: agentmesh-prod
+spec:
+  mtls:
+    mode: STRICT  # Enforce mTLS for all traffic
+
+---
+# AuthorizationPolicy for access control
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: agentmesh-authz
+  namespace: agentmesh-prod
+spec:
+  selector:
+    matchLabels:
+      app: agentmesh
+  action: ALLOW
+  rules:
+  # Allow from ingress gateway
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/istio-system/sa/istio-ingressgateway-service-account
+  
+  # Allow from Prometheus (metrics scraping)
+  - from:
+    - source:
+        namespaces:
+        - monitoring
+    to:
+    - operation:
+        paths:
+        - /actuator/prometheus
+        methods:
+        - GET
+  
+  # Allow inter-service communication
+  - from:
+    - source:
+        namespaces:
+        - agentmesh-prod
+
+---
+# RequestAuthentication for JWT validation (optional)
+apiVersion: security.istio.io/v1beta1
+kind: RequestAuthentication
+metadata:
+  name: agentmesh-jwt
+  namespace: agentmesh-prod
+spec:
+  selector:
+    matchLabels:
+      app: agentmesh
+  jwtRules:
+  - issuer: "https://auth.agentmesh.example.com"
+    jwksUri: "https://auth.agentmesh.example.com/.well-known/jwks.json"
+    audiences:
+    - "agentmesh-api"
+
+---
+# Telemetry configuration
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: agentmesh-telemetry
+  namespace: agentmesh-prod
+spec:
+  metrics:
+  - providers:
+    - name: prometheus
+    dimensions:
+      tenant_id:
+        value: request.headers['X-Tenant-ID']
+      agent_type:
+        value: request.headers['X-Agent-Type']
+  
+  accessLogging:
+  - providers:
+    - name: envoy
+
+---
+# ServiceEntry for external LLM APIs
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: openai-api
+  namespace: agentmesh-prod
+spec:
+  hosts:
+  - "api.openai.com"
+  ports:
+  - number: 443
+    name: https
+    protocol: HTTPS
+  location: MESH_EXTERNAL
+  resolution: DNS
+
+---
+# ServiceEntry for Weaviate (if external)
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: weaviate-external
+  namespace: agentmesh-prod
+spec:
+  hosts:
+  - "weaviate.example.com"
+  ports:
+  - number: 443
+    name: https
+    protocol: HTTPS
+  location: MESH_EXTERNAL
+  resolution: DNS

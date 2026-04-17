@@ -2,6 +2,7 @@ package com.therighthandapp.agentmesh.llm;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -12,6 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Records calls and returns pre-configured responses.
  */
 @Component
+@Primary
 public class MockLLMClient implements LLMClient {
     private static final Logger log = LoggerFactory.getLogger(MockLLMClient.class);
 
@@ -28,7 +30,17 @@ public class MockLLMClient implements LLMClient {
         callHistory.add(record);
 
         // Check if we have a pre-configured response for this prompt
-        String response = responseMap.getOrDefault(prompt, defaultResponse);
+        String response = responseMap.get(prompt);
+        
+        // If no pre-configured response, check if a default response was explicitly set
+        if (response == null && !defaultResponse.equals("Mock LLM response")) {
+            response = defaultResponse;
+        }
+        
+        // If still no response, generate contextual response
+        if (response == null) {
+            response = generateContextualResponse("", prompt);
+        }
 
         // Mock token counting (rough estimate)
         int promptTokens = estimateTokens(prompt);
@@ -59,7 +71,25 @@ public class MockLLMClient implements LLMClient {
                 .map(ChatMessage::getContent)
                 .orElse("");
 
-        String response = responseMap.getOrDefault(lastUserMessage, defaultResponse);
+        // Get system message to understand context
+        String systemMessage = messages.stream()
+                .filter(m -> "system".equals(m.getRole()))
+                .findFirst()
+                .map(ChatMessage::getContent)
+                .orElse("");
+
+        // Check for pre-configured response first
+        String response = responseMap.get(lastUserMessage);
+        
+        // If no pre-configured response, check if a default response was explicitly set
+        if (response == null && !defaultResponse.equals("Mock LLM response")) {
+            response = defaultResponse;
+        }
+        
+        // If still no response, generate contextual mock response
+        if (response == null) {
+            response = generateContextualResponse(systemMessage, lastUserMessage);
+        }
 
         int promptTokens = estimateTokens(combinedPrompt.toString());
         int completionTokens = estimateTokens(response);
@@ -95,6 +125,152 @@ public class MockLLMClient implements LLMClient {
     @Override
     public LLMUsage getLastUsage() {
         return lastUsage;
+    }
+
+    /**
+     * Generate contextual mock responses based on the request type
+     */
+    private String generateContextualResponse(String systemMessage, String userMessage) {
+        String lowerSystem = systemMessage.toLowerCase();
+        String lowerUser = userMessage.toLowerCase();
+        
+        // Test generation request - check for test engineer or test generation keywords
+        if ((lowerSystem.contains("test") && (lowerSystem.contains("engineer") || lowerSystem.contains("generat"))) 
+            || lowerUser.contains("generate") && lowerUser.contains("test")) {
+            return generateMockTestCode(userMessage);
+        }
+        
+        // Code generation request (including hello world)
+        if (lowerSystem.contains("code") || lowerSystem.contains("implement") || lowerUser.contains("implement") ||
+            lowerUser.contains("hello world") || lowerUser.contains("function")) {
+            return generateMockCode(userMessage);
+        }
+        
+        // Review request
+        if (lowerSystem.contains("review") || lowerSystem.contains("quality") || lowerUser.contains("review")) {
+            return generateMockReview(userMessage);
+        }
+        
+        // SRS/Requirements generation
+        if (lowerSystem.contains("architect") || lowerSystem.contains("srs") || lowerUser.contains("create an srs")) {
+            return generateMockSRS(userMessage);
+        }
+        
+        // Default response
+        return defaultResponse;
+    }
+    
+    private String generateMockSRS(String userMessage) {
+        return "# Software Requirements Specification\n\n" +
+               "## 1. Introduction\n" +
+               "Mock SRS for: " + userMessage.substring(0, Math.min(50, userMessage.length())) + "\n\n" +
+               "## 2. Functional Requirements\n" +
+               "- FR1: System shall provide CRUD operations\n" +
+               "- FR2: System shall validate input data\n" +
+               "- FR3: System shall handle errors gracefully\n\n" +
+               "## 3. Non-Functional Requirements\n" +
+               "- NFR1: Response time < 200ms\n" +
+               "- NFR2: 99.9% availability\n" +
+               "- NFR3: Support 1000 concurrent users";
+    }
+    
+    private String generateMockCode(String userMessage) {
+        // Check for hello world request
+        if (userMessage.toLowerCase().contains("hello")) {
+            return "public void helloWorld() {\n" +
+                   "    System.out.println(\"Hello, World!\");\n" +
+                   "}";
+        }
+        
+        return "public class MockGeneratedCode {\n" +
+               "    // Generated code for: " + userMessage.substring(0, Math.min(40, userMessage.length())) + "\n" +
+               "    \n" +
+               "    private final Repository repository;\n" +
+               "    \n" +
+               "    public MockGeneratedCode(Repository repository) {\n" +
+               "        this.repository = repository;\n" +
+               "    }\n" +
+               "    \n" +
+               "    public void execute() {\n" +
+               "        // Mock implementation\n" +
+               "        repository.save(new Entity());\n" +
+               "    }\n" +
+               "}";
+    }
+    
+    private String generateMockReview(String userMessage) {
+        return "# Code Review Report\n\n" +
+               "## Status: APPROVED\n\n" +
+               "## Issues Found: 2\n\n" +
+               "### Issue 1: Missing null checks\n" +
+               "- Severity: MEDIUM\n" +
+               "- Location: Line 15\n" +
+               "- Recommendation: Add null validation\n\n" +
+               "### Issue 2: Optimize database queries\n" +
+               "- Severity: LOW\n" +
+               "- Location: Line 42\n" +
+               "- Recommendation: Use batch operations\n\n" +
+               "## Score: 8/10\n" +
+               "Overall code quality is good with minor improvements needed.";
+    }
+    
+    private String generateMockTestCode(String userMessage) {
+        return "@Test\n" +
+               "public void testCrudOperations() {\n" +
+               "    // Arrange\n" +
+               "    Entity entity = new Entity();\n" +
+               "    entity.setId(1L);\n" +
+               "    entity.setName(\"Test\");\n" +
+               "    \n" +
+               "    // Act\n" +
+               "    repository.save(entity);\n" +
+               "    Entity result = repository.findById(1L).get();\n" +
+               "    \n" +
+               "    // Assert\n" +
+               "    assertNotNull(result);\n" +
+               "    assertEquals(\"Test\", result.getName());\n" +
+               "    \n" +
+               "    // Update test\n" +
+               "    result.setName(\"Updated\");\n" +
+               "    repository.save(result);\n" +
+               "    Entity updated = repository.findById(1L).get();\n" +
+               "    assertEquals(\"Updated\", updated.getName());\n" +
+               "    \n" +
+               "    // Delete test\n" +
+               "    repository.deleteById(1L);\n" +
+               "    assertFalse(repository.findById(1L).isPresent());\n" +
+               "}\n\n" +
+               "@Test\n" +
+               "public void testValidation() {\n" +
+               "    // Test input validation\n" +
+               "    Entity invalid = new Entity();\n" +
+               "    assertThrows(ValidationException.class, () -> {\n" +
+               "        repository.save(invalid);\n" +
+               "    });\n" +
+               "}\n\n" +
+               "@Test\n" +
+               "public void testErrorHandling() {\n" +
+               "    // Test error scenarios\n" +
+               "    assertThrows(NotFoundException.class, () -> {\n" +
+               "        repository.findById(999L).orElseThrow();\n" +
+               "    });\n" +
+               "}\n\n" +
+               "@Test\n" +
+               "public void testConcurrency() {\n" +
+               "    // Test concurrent access\n" +
+               "    Entity entity = new Entity();\n" +
+               "    entity.setId(2L);\n" +
+               "    repository.save(entity);\n" +
+               "    \n" +
+               "    CountDownLatch latch = new CountDownLatch(10);\n" +
+               "    for (int i = 0; i < 10; i++) {\n" +
+               "        new Thread(() -> {\n" +
+               "            repository.findById(2L);\n" +
+               "            latch.countDown();\n" +
+               "        }).start();\n" +
+               "    }\n" +
+               "    latch.await();\n" +
+               "}";
     }
 
     // Test utility methods

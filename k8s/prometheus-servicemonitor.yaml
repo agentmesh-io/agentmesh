@@ -1,0 +1,212 @@
+---
+# ServiceMonitor for Prometheus Operator
+# Configures Prometheus to scrape AgentMesh metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: agentmesh-metrics
+  namespace: agentmesh
+  labels:
+    app: agentmesh
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: agentmesh
+  endpoints:
+  - port: http
+    path: /actuator/prometheus
+    interval: 30s
+    scrapeTimeout: 10s
+    honorLabels: true
+    relabelings:
+    - sourceLabels: [__meta_kubernetes_pod_name]
+      targetLabel: pod
+    - sourceLabels: [__meta_kubernetes_namespace]
+      targetLabel: namespace
+    - sourceLabels: [__meta_kubernetes_pod_node_name]
+      targetLabel: node
+
+---
+# ServiceMonitor for PostgreSQL metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: postgres-metrics
+  namespace: agentmesh
+  labels:
+    app: postgres
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: postgres
+  endpoints:
+  - port: postgres
+    interval: 30s
+    scrapeTimeout: 10s
+
+---
+# ServiceMonitor for Redis metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: redis-metrics
+  namespace: agentmesh
+  labels:
+    app: redis-cluster
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: redis-cluster
+  endpoints:
+  - port: redis
+    interval: 30s
+    scrapeTimeout: 10s
+
+---
+# ServiceMonitor for Kafka metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: kafka-metrics
+  namespace: agentmesh
+  labels:
+    app: kafka
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: kafka
+  endpoints:
+  - port: jmx
+    interval: 30s
+    scrapeTimeout: 10s
+
+---
+# PodMonitor for all AgentMesh pods
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: agentmesh-pods
+  namespace: agentmesh
+  labels:
+    app: agentmesh
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: agentmesh
+  podMetricsEndpoints:
+  - port: http
+    path: /actuator/prometheus
+    interval: 30s
+    scrapeTimeout: 10s
+    relabelings:
+    - sourceLabels: [__meta_kubernetes_pod_name]
+      targetLabel: pod
+    - sourceLabels: [__meta_kubernetes_pod_container_name]
+      targetLabel: container
+    - sourceLabels: [__meta_kubernetes_namespace]
+      targetLabel: namespace
+
+---
+# PrometheusRule for custom recording rules
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: agentmesh-recording-rules
+  namespace: agentmesh
+  labels:
+    app: agentmesh
+    prometheus: kube-prometheus
+    role: recording-rules
+spec:
+  groups:
+  - name: agentmesh.recording.rules
+    interval: 30s
+    rules:
+    # Cache hit rate (percentage)
+    - record: agentmesh:cache:hit_rate
+      expr: |
+        100 * (
+          sum(rate(agentmesh_cache_hits_total[5m])) 
+          / 
+          (sum(rate(agentmesh_cache_hits_total[5m])) + sum(rate(agentmesh_cache_misses_total[5m])))
+        )
+    
+    # Agent task success rate (percentage)
+    - record: agentmesh:agent:success_rate
+      expr: |
+        100 * (
+          sum(rate(agentmesh_agent_tasks_success_total[5m])) 
+          / 
+          sum(rate(agentmesh_agent_tasks_total[5m]))
+        )
+    
+    # Average LLM call duration (seconds)
+    - record: agentmesh:llm:avg_duration_seconds
+      expr: |
+        rate(agentmesh_llm_call_duration_seconds_sum[5m]) 
+        / 
+        rate(agentmesh_llm_call_duration_seconds_count[5m])
+    
+    # MAST violations per minute
+    - record: agentmesh:mast:violations_per_minute
+      expr: |
+        sum(rate(agentmesh_mast_violations_total[1m])) * 60
+    
+    # Critical MAST violations per minute
+    - record: agentmesh:mast:critical_violations_per_minute
+      expr: |
+        sum(rate(agentmesh_mast_violations_total{severity="CRITICAL"}[1m])) * 60
+    
+    # Database query latency (p95)
+    - record: agentmesh:database:query_duration_p95
+      expr: |
+        histogram_quantile(0.95, 
+          sum(rate(agentmesh_database_query_duration_seconds_bucket[5m])) by (le)
+        )
+    
+    # Memory hybrid search latency (p99)
+    - record: agentmesh:memory:search_duration_p99
+      expr: |
+        histogram_quantile(0.99, 
+          sum(rate(agentmesh_memory_search_duration_seconds_bucket[5m])) by (le)
+        )
+    
+    # Token consumption rate (per second)
+    - record: agentmesh:tokens:rate_per_second
+      expr: |
+        rate(agentmesh_llm_tokens_total[5m])
+    
+    # Self-correction success rate
+    - record: agentmesh:selfcorrection:success_rate
+      expr: |
+        100 * (
+          sum(rate(agentmesh_selfcorrection_successes_total[5m])) 
+          / 
+          sum(rate(agentmesh_selfcorrection_attempts_total[5m]))
+        )
+    
+    # Blackboard operations per second
+    - record: agentmesh:blackboard:ops_per_second
+      expr: |
+        rate(agentmesh_blackboard_posts_total[5m]) + rate(agentmesh_blackboard_queries_total[5m])
+    
+    # HikariCP connection pool utilization (percentage)
+    - record: agentmesh:hikari:pool_utilization
+      expr: |
+        100 * (
+          hikaricp_connections_active 
+          / 
+          hikaricp_connections_max
+        )
+    
+    # Average agent execution time by type
+    - record: agentmesh:agent:avg_execution_time_by_type
+      expr: |
+        rate(agentmesh_agent_execution_duration_seconds_sum[5m]) 
+        / 
+        rate(agentmesh_agent_execution_duration_seconds_count[5m])

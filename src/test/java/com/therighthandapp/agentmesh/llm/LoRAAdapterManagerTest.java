@@ -2,19 +2,26 @@ package com.therighthandapp.agentmesh.llm;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Unit tests for LoRA Adapter Manager
+ * Integration tests for LoRA Adapter Manager
  */
+@SpringBootTest
+@ActiveProfiles("test")
 public class LoRAAdapterManagerTest {
 
+    @Autowired
     private LoRAAdapterManager manager;
 
     @BeforeEach
     public void setup() {
-        manager = new LoRAAdapterManager();
+        // Clear cache before each test to ensure isolation
+        manager.clearAllAdapters();
     }
 
     @Test

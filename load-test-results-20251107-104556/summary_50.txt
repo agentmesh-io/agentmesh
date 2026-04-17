@@ -1,0 +1,15 @@
+Load Test Summary: Heavy Load
+Concurrency: 50
+Duration: 0s
+Total Requests: 50
+Successful: 0
+Failed: 50
+Success Rate: 0.0%
+Throughput:  req/s
+
+Latency:
+  Min: 50ms
+  Avg: 119ms
+  Max: 162ms
+  P95: 152ms
+  P99: 158ms

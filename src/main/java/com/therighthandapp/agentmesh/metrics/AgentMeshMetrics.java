@@ -22,19 +22,45 @@ public class AgentMeshMetrics {
     private final MeterRegistry meterRegistry;
     private final MASTValidator mastValidator;
 
-    // Counters
+    // LLM Counters
     private final Counter llmCallsTotal;
     private final Counter llmTokensTotal;
     private final Counter selfCorrectionAttempts;
     private final Counter selfCorrectionSuccesses;
     private final Counter selfCorrectionFailures;
 
+    // Agent Execution Counters
+    private final Counter agentTasksTotal;
+    private final Counter agentTasksSuccess;
+    private final Counter agentTasksFailure;
+    
+    // Blackboard Counters
+    private final Counter blackboardPostsTotal;
+    private final Counter blackboardQueriesTotal;
+    
+    // Memory Counters
+    private final Counter memoryOperationsTotal;
+    private final Counter memoryHybridSearchTotal;
+
     // Timers
     private final Timer selfCorrectionDuration;
     private final Timer llmCallDuration;
+    private final Timer agentExecutionDuration;
+    private final Timer blackboardQueryDuration;
+    private final Timer memorySearchDuration;
 
     // MAST violation counters per failure mode
     private final Map<MASTFailureMode, Counter> mastViolationCounters = new ConcurrentHashMap<>();
+    
+    // Cache metrics (Week 3 caching layer)
+    private final Counter cacheHits;
+    private final Counter cacheMisses;
+    private final Timer cacheOperationDuration;
+    
+    // Database connection pool metrics
+    private final Gauge hikariActiveConnections;
+    private final Gauge hikariIdleConnections;
+    private final Gauge hikariPendingThreads;
 
     public AgentMeshMetrics(MeterRegistry meterRegistry, MASTValidator mastValidator) {
         this.meterRegistry = meterRegistry;
@@ -70,6 +96,49 @@ public class AgentMeshMetrics {
                 .description("Duration of LLM API calls")
                 .register(meterRegistry);
 
+        // Initialize agent execution metrics
+        this.agentTasksTotal = Counter.builder("agentmesh.agent.tasks.total")
+                .description("Total number of agent tasks executed")
+                .register(meterRegistry);
+
+        this.agentTasksSuccess = Counter.builder("agentmesh.agent.tasks.success")
+                .description("Number of successful agent tasks")
+                .register(meterRegistry);
+
+        this.agentTasksFailure = Counter.builder("agentmesh.agent.tasks.failure")
+                .description("Number of failed agent tasks")
+                .register(meterRegistry);
+
+        this.agentExecutionDuration = Timer.builder("agentmesh.agent.execution.duration")
+                .description("Agent task execution duration")
+                .register(meterRegistry);
+
+        // Initialize blackboard metrics
+        this.blackboardPostsTotal = Counter.builder("agentmesh.blackboard.posts.total")
+                .description("Total number of blackboard posts")
+                .register(meterRegistry);
+
+        this.blackboardQueriesTotal = Counter.builder("agentmesh.blackboard.queries.total")
+                .description("Total number of blackboard queries")
+                .register(meterRegistry);
+
+        this.blackboardQueryDuration = Timer.builder("agentmesh.blackboard.query.duration")
+                .description("Blackboard query duration")
+                .register(meterRegistry);
+
+        // Initialize memory metrics
+        this.memoryOperationsTotal = Counter.builder("agentmesh.memory.operations.total")
+                .description("Total number of memory operations")
+                .register(meterRegistry);
+
+        this.memoryHybridSearchTotal = Counter.builder("agentmesh.memory.hybrid_search.total")
+                .description("Total number of hybrid search operations")
+                .register(meterRegistry);
+
+        this.memorySearchDuration = Timer.builder("agentmesh.memory.search.duration")
+                .description("Memory search duration")
+                .register(meterRegistry);
+
         // Initialize MAST violation counters for each failure mode
         for (MASTFailureMode mode : MASTFailureMode.values()) {
             Counter counter = Counter.builder("agentmesh.mast.violations")
@@ -84,6 +153,54 @@ public class AgentMeshMetrics {
         Gauge.builder("agentmesh.mast.unresolved.violations", mastValidator,
                 v -> v.getUnresolvedViolations().size())
                 .description("Number of unresolved MAST violations")
+                .register(meterRegistry);
+        
+        // Initialize cache metrics (Week 3 caching layer)
+        this.cacheHits = Counter.builder("agentmesh.cache.hits")
+                .description("Total cache hits")
+                .register(meterRegistry);
+        
+        this.cacheMisses = Counter.builder("agentmesh.cache.misses")
+                .description("Total cache misses")
+                .register(meterRegistry);
+        
+        this.cacheOperationDuration = Timer.builder("agentmesh.cache.operation.duration")
+                .description("Cache operation duration")
+                .register(meterRegistry);
+        
+        // Database connection pool metrics (HikariCP)
+        // Note: These will be null if HikariCP metrics are not available
+        this.hikariActiveConnections = Gauge.builder("agentmesh.hikari.connections.active",
+                meterRegistry, reg -> {
+                    try {
+                        return reg.find("hikaricp.connections.active").gauge().value();
+                    } catch (Exception e) {
+                        return 0.0;
+                    }
+                })
+                .description("Active HikariCP connections")
+                .register(meterRegistry);
+        
+        this.hikariIdleConnections = Gauge.builder("agentmesh.hikari.connections.idle",
+                meterRegistry, reg -> {
+                    try {
+                        return reg.find("hikaricp.connections.idle").gauge().value();
+                    } catch (Exception e) {
+                        return 0.0;
+                    }
+                })
+                .description("Idle HikariCP connections")
+                .register(meterRegistry);
+        
+        this.hikariPendingThreads = Gauge.builder("agentmesh.hikari.connections.pending",
+                meterRegistry, reg -> {
+                    try {
+                        return reg.find("hikaricp.connections.pending").gauge().value();
+                    } catch (Exception e) {
+                        return 0.0;
+                    }
+                })
+                .description("Pending HikariCP connection requests")
                 .register(meterRegistry);
     }
 
@@ -139,5 +256,151 @@ public class AgentMeshMetrics {
                 .description("Health score for agent (0-100)")
                 .register(meterRegistry);
     }
-}
 
+    // ==================== Agent Execution Metrics ====================
+
+    /**
+     * Record agent task start
+     */
+    public void recordAgentTaskStart(String agentType, String tenantId) {
+        agentTasksTotal.increment();
+        Counter.builder("agentmesh.agent.tasks.started")
+                .tag("agent_type", agentType)
+                .tag("tenant_id", tenantId)
+                .register(meterRegistry)
+                .increment();
+    }
+
+    /**
+     * Record successful agent task completion
+     */
+    public void recordAgentTaskSuccess(String agentType, String tenantId, Duration duration) {
+        agentTasksSuccess.increment();
+        Timer.builder("agentmesh.agent.execution.duration")
+                .tag("agent_type", agentType)
+                .tag("tenant_id", tenantId)
+                .tag("status", "success")
+                .register(meterRegistry)
+                .record(duration);
+    }
+
+    /**
+     * Record failed agent task
+     */
+    public void recordAgentTaskFailure(String agentType, String tenantId, String errorType) {
+        agentTasksFailure.increment();
+        Counter.builder("agentmesh.agent.tasks.failed")
+                .tag("agent_type", agentType)
+                .tag("tenant_id", tenantId)
+                .tag("error_type", errorType)
+                .register(meterRegistry)
+                .increment();
+    }
+
+    // ==================== Blackboard Metrics ====================
+
+    /**
+     * Record blackboard post
+     */
+    public void recordBlackboardPost(String tenantId, String postType) {
+        blackboardPostsTotal.increment();
+        Counter.builder("agentmesh.blackboard.posts.by_type")
+                .tag("tenant_id", tenantId)
+                .tag("post_type", postType)
+                .register(meterRegistry)
+                .increment();
+    }
+
+    /**
+     * Record blackboard query
+     */
+    public void recordBlackboardQuery(String tenantId, Duration duration) {
+        blackboardQueriesTotal.increment();
+        Timer.builder("agentmesh.blackboard.query.duration")
+                .tag("tenant_id", tenantId)
+                .register(meterRegistry)
+                .record(duration);
+    }
+
+    // ==================== Memory Metrics ====================
+
+    /**
+     * Record memory operation
+     */
+    public void recordMemoryOperation(String tenantId, String operationType) {
+        memoryOperationsTotal.increment();
+        Counter.builder("agentmesh.memory.operations.by_type")
+                .tag("tenant_id", tenantId)
+                .tag("operation_type", operationType)
+                .register(meterRegistry)
+                .increment();
+    }
+
+    /**
+     * Record hybrid search operation
+     */
+    public void recordHybridSearch(String tenantId, Duration duration, int resultsCount) {
+        memoryHybridSearchTotal.increment();
+        Timer.builder("agentmesh.memory.search.duration")
+                .tag("tenant_id", tenantId)
+                .register(meterRegistry)
+                .record(duration);
+        
+        meterRegistry.summary("agentmesh.memory.search.results", "tenant_id", tenantId)
+                .record(resultsCount);
+    }
+    
+    // ==================== Cache Metrics (Week 3) ====================
+    
+    /**
+     * Record cache hit
+     */
+    public void recordCacheHit(String cacheName) {
+        cacheHits.increment();
+        Counter.builder("agentmesh.cache.hits.by_name")
+                .tag("cache_name", cacheName)
+                .register(meterRegistry)
+                .increment();
+    }
+    
+    /**
+     * Record cache miss
+     */
+    public void recordCacheMiss(String cacheName) {
+        cacheMisses.increment();
+        Counter.builder("agentmesh.cache.misses.by_name")
+                .tag("cache_name", cacheName)
+                .register(meterRegistry)
+                .increment();
+    }
+    
+    /**
+     * Record cache operation
+     */
+    public void recordCacheOperation(String cacheName, String operation, Duration duration) {
+        Timer.builder("agentmesh.cache.operation.duration")
+                .tag("cache_name", cacheName)
+                .tag("operation", operation)
+                .register(meterRegistry)
+                .record(duration);
+    }
+    
+    /**
+     * Get cache hit rate for a specific cache
+     */
+    public double getCacheHitRate(String cacheName) {
+        Counter hitsCounter = meterRegistry.find("agentmesh.cache.hits.by_name")
+                .tag("cache_name", cacheName)
+                .counter();
+        
+        Counter missesCounter = meterRegistry.find("agentmesh.cache.misses.by_name")
+                .tag("cache_name", cacheName)
+                .counter();
+        
+        double hits = hitsCounter != null ? hitsCounter.count() : 0.0;
+        double misses = missesCounter != null ? missesCounter.count() : 0.0;
+        double total = hits + misses;
+        
+        return total > 0 ? (hits / total) * 100 : 0.0;
+    }
+}

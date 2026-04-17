@@ -6,6 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * REST API for Long-Term Memory (Weaviate) operations
@@ -26,6 +27,35 @@ public class MemoryController {
         return ResponseEntity.ok(new StoreResponse(id));
     }
 
+    /**
+     * Store multiple memory artifacts in batch for improved performance
+     * Uses Weaviate's batch API which is ~10x faster than individual inserts
+     * @param request Batch storage request with list of artifacts
+     * @return Batch storage response with stored artifact IDs
+     */
+    @PostMapping("/artifacts/batch")
+    public ResponseEntity<BatchStoreResponse> storeArtifactsBatch(@RequestBody BatchStoreRequest request) {
+        if (request.getArtifacts() == null || request.getArtifacts().isEmpty()) {
+            return ResponseEntity.badRequest()
+                    .body(new BatchStoreResponse(null, "Artifacts list cannot be empty", 0, 0));
+        }
+
+        long startTime = System.currentTimeMillis();
+        
+        // Use auto-split batch storage for optimal performance
+        int batchSize = request.getBatchSize() > 0 ? request.getBatchSize() : 50;
+        int storedCount = weaviateService.storeBatchWithAutoSplit(request.getArtifacts(), batchSize);
+        
+        long duration = System.currentTimeMillis() - startTime;
+
+        return ResponseEntity.ok(new BatchStoreResponse(
+                null, // We don't return IDs for batch to reduce response size
+                "Batch storage completed successfully",
+                storedCount,
+                duration
+        ));
+    }
+
     @GetMapping("/search")
     public ResponseEntity<List<MemoryArtifact>> semanticSearch(
             @RequestParam String query,
@@ -44,6 +74,103 @@ public class MemoryController {
         return ResponseEntity.ok(results);
     }
 
+    /**
+     * Hybrid search combining BM25 keyword matching with vector semantic search
+     * @param request Search parameters including query, limit, alpha, and agentId
+     * @return List of matching memory artifacts ranked by hybrid relevance
+     */
+    @PostMapping("/hybrid-search")
+    public ResponseEntity<HybridSearchResponse> hybridSearch(@RequestBody HybridSearchRequest request) {
+        // Validate alpha parameter (0.0 = pure BM25, 1.0 = pure vector, 0.5-0.75 = balanced)
+        double alpha = request.getAlpha();
+        if (alpha < 0.0 || alpha > 1.0) {
+            return ResponseEntity.badRequest()
+                    .body(new HybridSearchResponse(null, "Alpha must be between 0.0 and 1.0", 0, alpha));
+        }
+
+        List<MemoryArtifact> results = weaviateService.hybridSearch(
+                request.getQuery(),
+                request.getLimit(),
+                alpha,
+                request.getAgentId()
+        );
+
+        return ResponseEntity.ok(new HybridSearchResponse(
+                results,
+                "Hybrid search completed successfully",
+                results.size(),
+                alpha
+        ));
+    }
+
+    /**
+     * Advanced search with metadata filters and optional hybrid mode
+     * @param request Search parameters with filters (artifactType, agentId, projectId, etc.)
+     * @return List of matching memory artifacts filtered by metadata
+     */
+    @PostMapping("/search-filtered")
+    public ResponseEntity<FilteredSearchResponse> filteredSearch(@RequestBody FilteredSearchRequest request) {
+        // Validate hybrid mode parameters
+        if (request.isUseHybrid()) {
+            double alpha = request.getAlpha();
+            if (alpha < 0.0 || alpha > 1.0) {
+                return ResponseEntity.badRequest()
+                        .body(new FilteredSearchResponse(null, "Alpha must be between 0.0 and 1.0", 0));
+            }
+        }
+
+        List<MemoryArtifact> results = weaviateService.searchWithFilters(
+                request.getQuery(),
+                request.getLimit(),
+                request.getFilters(),
+                request.isUseHybrid(),
+                request.getAlpha(),
+                request.getAgentId()
+        );
+
+        return ResponseEntity.ok(new FilteredSearchResponse(
+                results,
+                "Filtered search completed successfully",
+                results.size()
+        ));
+    }
+
+    /**
+     * Multi-vector search with smart routing based on query length
+     * Routes short queries (≤5 words) to title search, long queries to content search
+     * Enables higher precision for different query types
+     * 
+     * @param request Multi-vector search request with query and parameters
+     * @return List of matching memory artifacts using optimal search strategy
+     */
+    @PostMapping("/multi-vector-search")
+    public ResponseEntity<MultiVectorSearchResponse> multiVectorSearch(@RequestBody MultiVectorSearchRequest request) {
+        if (request.getQuery() == null || request.getQuery().trim().isEmpty()) {
+            return ResponseEntity.badRequest()
+                    .body(new MultiVectorSearchResponse(null, "Query cannot be empty", 0, null));
+        }
+
+        int limit = request.getLimit() > 0 ? request.getLimit() : 10;
+        
+        List<MemoryArtifact> results = weaviateService.multiVectorSearch(
+                request.getQuery(),
+                limit,
+                request.getAgentId()
+        );
+
+        // Determine which strategy was used
+        String[] words = request.getQuery().trim().split("\\s+");
+        String strategyUsed = words.length <= 5 ? "title" : "content";
+
+        return ResponseEntity.ok(new MultiVectorSearchResponse(
+                results,
+                "Multi-vector search completed successfully",
+                results.size(),
+                strategyUsed
+        ));
+    }
+
+    // Request/Response DTOs
     public static class StoreResponse {
         private final String id;
 
@@ -54,6 +181,140 @@ public class MemoryController {
         public String getId() {
             return id;
         }
+    }
+
+    public static class HybridSearchRequest {
+        private String query;
+        private int limit = 10;
+        private double alpha = 0.75; // Balanced by default
+        private String agentId;
+
+        public String getQuery() { return query; }
+        public void setQuery(String query) { this.query = query; }
+        public int getLimit() { return limit; }
+        public void setLimit(int limit) { this.limit = limit; }
+        public double getAlpha() { return alpha; }
+        public void setAlpha(double alpha) { this.alpha = alpha; }
+        public String getAgentId() { return agentId; }
+        public void setAgentId(String agentId) { this.agentId = agentId; }
+    }
+
+    public static class HybridSearchResponse {
+        private final List<MemoryArtifact> results;
+        private final String message;
+        private final int count;
+        private final double alphaUsed;
+
+        public HybridSearchResponse(List<MemoryArtifact> results, String message, int count, double alphaUsed) {
+            this.results = results;
+            this.message = message;
+            this.count = count;
+            this.alphaUsed = alphaUsed;
+        }
+
+        public List<MemoryArtifact> getResults() { return results; }
+        public String getMessage() { return message; }
+        public int getCount() { return count; }
+        public double getAlphaUsed() { return alphaUsed; }
+    }
+
+    public static class FilteredSearchRequest {
+        private String query;
+        private int limit = 10;
+        private java.util.Map<String, Object> filters = new java.util.HashMap<>();
+        private boolean useHybrid = true;
+        private double alpha = 0.75;
+        private String agentId;
+
+        public String getQuery() { return query; }
+        public void setQuery(String query) { this.query = query; }
+        public int getLimit() { return limit; }
+        public void setLimit(int limit) { this.limit = limit; }
+        public java.util.Map<String, Object> getFilters() { return filters; }
+        public void setFilters(java.util.Map<String, Object> filters) { this.filters = filters; }
+        public boolean isUseHybrid() { return useHybrid; }
+        public void setUseHybrid(boolean useHybrid) { this.useHybrid = useHybrid; }
+        public double getAlpha() { return alpha; }
+        public void setAlpha(double alpha) { this.alpha = alpha; }
+        public String getAgentId() { return agentId; }
+        public void setAgentId(String agentId) { this.agentId = agentId; }
+    }
+
+    public static class FilteredSearchResponse {
+        private final List<MemoryArtifact> results;
+        private final String message;
+        private final int count;
+
+        public FilteredSearchResponse(List<MemoryArtifact> results, String message, int count) {
+            this.results = results;
+            this.message = message;
+            this.count = count;
+        }
+
+        public List<MemoryArtifact> getResults() { return results; }
+        public String getMessage() { return message; }
+        public int getCount() { return count; }
+    }
+
+    public static class BatchStoreRequest {
+        private List<MemoryArtifact> artifacts;
+        private int batchSize = 50; // Default batch size
+
+        public List<MemoryArtifact> getArtifacts() { return artifacts; }
+        public void setArtifacts(List<MemoryArtifact> artifacts) { this.artifacts = artifacts; }
+        public int getBatchSize() { return batchSize; }
+        public void setBatchSize(int batchSize) { this.batchSize = batchSize; }
+    }
+
+    public static class BatchStoreResponse {
+        private final Map<String, String> ids; // Can be null for large batches
+        private final String message;
+        private final int storedCount;
+        private final long durationMs;
+
+        public BatchStoreResponse(Map<String, String> ids, String message, int storedCount, long durationMs) {
+            this.ids = ids;
+            this.message = message;
+            this.storedCount = storedCount;
+            this.durationMs = durationMs;
+        }
+
+        public Map<String, String> getIds() { return ids; }
+        public String getMessage() { return message; }
+        public int getStoredCount() { return storedCount; }
+        public long getDurationMs() { return durationMs; }
+    }
+
+    public static class MultiVectorSearchRequest {
+        private String query;
+        private int limit = 10;
+        private String agentId;
+
+        public String getQuery() { return query; }
+        public void setQuery(String query) { this.query = query; }
+        public int getLimit() { return limit; }
+        public void setLimit(int limit) { this.limit = limit; }
+        public String getAgentId() { return agentId; }
+        public void setAgentId(String agentId) { this.agentId = agentId; }
+    }
+
+    public static class MultiVectorSearchResponse {
+        private final List<MemoryArtifact> results;
+        private final String message;
+        private final int count;
+        private final String strategyUsed; // "title" or "content"
+
+        public MultiVectorSearchResponse(List<MemoryArtifact> results, String message, int count, String strategyUsed) {
+            this.results = results;
+            this.message = message;
+            this.count = count;
+            this.strategyUsed = strategyUsed;
+        }
+
+        public List<MemoryArtifact> getResults() { return results; }
+        public String getMessage() { return message; }
+        public int getCount() { return count; }
+        public String getStrategyUsed() { return strategyUsed; }
     }
 }
 

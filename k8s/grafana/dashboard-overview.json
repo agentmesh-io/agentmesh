@@ -1,0 +1,213 @@
+{
+  "dashboard": {
+    "title": "AgentMesh - Overview",
+    "tags": ["agentmesh", "overview"],
+    "timezone": "browser",
+    "refresh": "30s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Active Agents",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+        "targets": [{
+          "expr": "agentmesh_agents_active",
+          "legendFormat": "Active Agents"
+        }],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "reduceOptions": {"values": false, "calcs": ["lastNotNull"]}
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 50, "color": "yellow"},
+                {"value": 80, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Agent Success Rate",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+        "targets": [{
+          "expr": "agentmesh:agent:success_rate",
+          "legendFormat": "Success Rate %"
+        }],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "unit": "percent"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 80, "color": "yellow"},
+                {"value": 95, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Cache Hit Rate",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+        "targets": [{
+          "expr": "agentmesh:cache:hit_rate",
+          "legendFormat": "Hit Rate %"
+        }],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "unit": "percent"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 50, "color": "yellow"},
+                {"value": 80, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Unresolved MAST Violations",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+        "targets": [{
+          "expr": "agentmesh_mast_unresolved_violations",
+          "legendFormat": "Unresolved"
+        }],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 5, "color": "yellow"},
+                {"value": 10, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Agent Task Execution Rate",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+        "targets": [
+          {
+            "expr": "sum(rate(agentmesh_agent_tasks_total[5m]))",
+            "legendFormat": "Total Tasks/s"
+          },
+          {
+            "expr": "sum(rate(agentmesh_agent_tasks_success[5m]))",
+            "legendFormat": "Success/s"
+          },
+          {
+            "expr": "sum(rate(agentmesh_agent_tasks_failure[5m]))",
+            "legendFormat": "Failures/s"
+          }
+        ],
+        "yaxes": [
+          {"format": "ops", "label": "Operations/sec"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 6,
+        "title": "LLM Token Consumption",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+        "targets": [{
+          "expr": "rate(agentmesh_llm_tokens_total[5m])",
+          "legendFormat": "Tokens/sec"
+        }],
+        "yaxes": [
+          {"format": "short", "label": "Tokens/sec"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 7,
+        "title": "MAST Violations by Severity",
+        "type": "piechart",
+        "gridPos": {"h": 8, "w": 8, "x": 0, "y": 12},
+        "targets": [{
+          "expr": "sum by (severity) (agentmesh_mast_violations_by_severity)",
+          "legendFormat": "{{severity}}"
+        }]
+      },
+      {
+        "id": 8,
+        "title": "Blackboard Operations",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 8, "x": 8, "y": 12},
+        "targets": [
+          {
+            "expr": "rate(agentmesh_blackboard_posts_total[5m])",
+            "legendFormat": "Writes/s"
+          },
+          {
+            "expr": "rate(agentmesh_blackboard_queries_total[5m])",
+            "legendFormat": "Reads/s"
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "HikariCP Pool Utilization",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 8, "x": 16, "y": 12},
+        "targets": [
+          {
+            "expr": "agentmesh:hikari:pool_utilization",
+            "legendFormat": "Pool Utilization %"
+          },
+          {
+            "expr": "hikaricp_connections_active",
+            "legendFormat": "Active"
+          },
+          {
+            "expr": "hikaricp_connections_idle",
+            "legendFormat": "Idle"
+          }
+        ],
+        "yaxes": [
+          {"format": "percent", "max": 100},
+          {"format": "short"}
+        ]
+      }
+    ]
+  }
+}

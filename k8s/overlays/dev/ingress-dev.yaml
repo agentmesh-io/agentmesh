@@ -1,0 +1,32 @@
+---
+# Development Ingress Configuration
+# Simple HTTP access for local development
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agentmesh-ingress-dev
+  namespace: agentmesh-dev
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: agentmesh-dev.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: agentmesh-service
+            port:
+              number: 8080
+      - path: /actuator
+        pathType: Prefix
+        backend:
+          service:
+            name: agentmesh-service
+            port:
+              number: 8080
