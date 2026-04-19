@@ -24,7 +24,7 @@ import java.util.*;
 @RequestMapping("/api/projects")
 @RequiredArgsConstructor
 @Slf4j
-@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:3001", "http://localhost:13001"})
+@CrossOrigin(origins = {"http://localhost:5173", "http://localhost:3000", "http://localhost:3001", "http://localhost:13001", "http://app.localhost"})
 public class ProjectController {
 
     private final ProjectInitializationService projectInitializationService;

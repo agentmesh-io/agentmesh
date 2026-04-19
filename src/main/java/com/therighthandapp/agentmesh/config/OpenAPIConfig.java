@@ -43,7 +43,7 @@ public class OpenAPIConfig {
                     - **STANDARD**: 10 projects, 50 agents
                     - **PREMIUM**: 50 projects, 200 agents, 20% discount
                     - **ENTERPRISE**: Unlimited, 30% discount, custom pricing""")
-                .version("1.0.0-Phase3")
+                .version("1.0.0-RC1")
                 .contact(new Contact()
                     .name("AgentMesh Team")
                     .email("support@agentmesh.io")
@@ -53,8 +53,11 @@ public class OpenAPIConfig {
                     .url("https://www.apache.org/licenses/LICENSE-2.0.html")))
             .servers(List.of(
                 new Server()
-                    .url("http://localhost:8080")
-                    .description("Local Development"),
+                    .url("http://localhost:8081")
+                    .description("Local Development (dev profile)"),
+                new Server()
+                    .url("http://api.localhost")
+                    .description("Local via Traefik Gateway"),
                 new Server()
                     .url("https://api.agentmesh.io")
                     .description("Production Server")))
