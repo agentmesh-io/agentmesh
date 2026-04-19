@@ -2,13 +2,16 @@
 # Postgres: dev-postgres on localhost:5435 | Redis: dev-redis on localhost:6381
 # LMStudio: localhost:1234
 
+server:
+  port: ${SERVER_PORT:8081}  # Java port range: 8081-8100 per Architect Protocol §8
+
 spring:
   # Shared PostgreSQL (dev-postgres container on port 5435)
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5435}/${DB_NAME:agentmesh}
     driver-class-name: org.postgresql.Driver
-    username: ${DB_USER:postgres}
-    password: ${DB_PASSWORD:postgres}
+    username: ${DB_USER:admin}
+    password: ${DB_PASSWORD:startup_password}
 
     hikari:
       maximum-pool-size: 20
@@ -21,7 +24,7 @@ spring:
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
-      ddl-auto: update
+      ddl-auto: none  # Flyway manages schema — do not let Hibernate auto-update
     show-sql: true
     properties:
       hibernate:
