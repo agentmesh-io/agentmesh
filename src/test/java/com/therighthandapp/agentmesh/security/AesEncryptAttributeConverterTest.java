@@ -2,10 +2,7 @@ package com.therighthandapp.agentmesh.security;
 
 import org.junit.jupiter.api.*;
 
-import java.lang.reflect.Field;
 import java.util.Base64;
-import java.util.Collections;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -138,30 +135,14 @@ class AesEncryptAttributeConverterTest {
         }
     }
 
-    // --- Helpers to set/clear env var for testing ---
+    // --- Helpers to set/clear system property for testing ---
 
-    @SuppressWarnings("unchecked")
     private static void setEnvKey(String value) {
-        try {
-            Map<String, String> env = System.getenv();
-            Field field = env.getClass().getDeclaredField("m");
-            field.setAccessible(true);
-            ((Map<String, String>) field.get(env)).put("PII_ENCRYPTION_KEY", value);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to set test env var", e);
-        }
+        System.setProperty("PII_ENCRYPTION_KEY", value);
     }
 
-    @SuppressWarnings("unchecked")
     private static void clearEnvKey() {
-        try {
-            Map<String, String> env = System.getenv();
-            Field field = env.getClass().getDeclaredField("m");
-            field.setAccessible(true);
-            ((Map<String, String>) field.get(env)).remove("PII_ENCRYPTION_KEY");
-        } catch (Exception e) {
-            // Ignore — may not be set
-        }
+        System.clearProperty("PII_ENCRYPTION_KEY");
     }
 }
 

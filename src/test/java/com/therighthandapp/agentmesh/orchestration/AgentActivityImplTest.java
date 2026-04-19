@@ -61,7 +61,7 @@ public class AgentActivityImplTest {
         String expectedCode = "public class UserController { public void method() {} }";
         mockLLM.setDefaultResponse(expectedCode);
 
-        // Execute
+        // Execute — returns a UUID artifactId, not a blackboard entry Long ID
         String codeId = agentActivity.executeCodeGeneration(planId, "Implement UserController");
 
         // Verify
@@ -69,11 +69,12 @@ public class AgentActivityImplTest {
         // Self-correction loop may make multiple calls, so check that at least one was made
         assertThat(mockLLM.getCallHistory()).isNotEmpty();
         
-        var entry = blackboard.getById(Long.parseLong(codeId));
-        assertThat(entry).isPresent();
-        // May be CODE_FINAL if self-correction succeeded, or CODE if it fell back
-        assertThat(entry.get().getEntryType()).isIn("CODE", "CODE_FINAL");
-        assertThat(entry.get().getContent()).contains("class");
+        // codeId is a UUID artifactId; verify code was posted to blackboard by reading CODE entries
+        var codeEntries = blackboard.readByType("CODE");
+        assertThat(codeEntries).isNotEmpty();
+        var latestCode = codeEntries.get(codeEntries.size() - 1);
+        assertThat(latestCode.getEntryType()).isIn("CODE", "CODE_FINAL");
+        assertThat(latestCode.getContent()).contains("class");
     }
 
     @Test

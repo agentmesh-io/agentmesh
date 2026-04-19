@@ -46,11 +46,15 @@ public class AesEncryptAttributeConverter implements AttributeConverter<String, 
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     /**
-     * Lazy-loaded encryption key from environment variable.
+     * Lazy-loaded encryption key from system property or environment variable.
      * Returns null if PII_ENCRYPTION_KEY is not set (passthrough mode).
+     * Checks system property first (useful for testing), then env var.
      */
     private static SecretKey getKey() {
-        String encodedKey = System.getenv("PII_ENCRYPTION_KEY");
+        String encodedKey = System.getProperty("PII_ENCRYPTION_KEY");
+        if (encodedKey == null || encodedKey.isBlank()) {
+            encodedKey = System.getenv("PII_ENCRYPTION_KEY");
+        }
         if (encodedKey == null || encodedKey.isBlank()) {
             return null;
         }
