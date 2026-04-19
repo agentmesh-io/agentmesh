@@ -57,11 +57,11 @@ spring:
       enabled: true
       path: /h2-console
 
-  # Redis Configuration (for production)
+  # Redis Configuration (shared dev-redis on 6381, override for prod)
   data:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:localhost}
-      port: ${SPRING_DATA_REDIS_PORT:6379}
+      port: ${SPRING_DATA_REDIS_PORT:6381}
 
   # Cache Configuration
   cache:

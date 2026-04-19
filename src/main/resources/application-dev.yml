@@ -1,0 +1,71 @@
+# Development Profile - Shared Infrastructure (per ~/infra/onboarding.md)
+# Postgres: dev-postgres on localhost:5435 | Redis: dev-redis on localhost:6381
+# LMStudio: localhost:1234
+
+spring:
+  # Shared PostgreSQL (dev-postgres container on port 5435)
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5435}/${DB_NAME:agentmesh}
+    driver-class-name: org.postgresql.Driver
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 20000
+      idle-timeout: 300000
+      max-lifetime: 1800000
+      pool-name: AgentMeshHikariPool-Dev
+
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+  # Enable Flyway for Postgres
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+    locations: classpath:db/migration
+    clean-disabled: true
+
+  # Disable H2 console in dev (using Postgres)
+  h2:
+    console:
+      enabled: false
+
+  # Shared Redis (dev-redis container on port 6381)
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6381}
+
+  cache:
+    type: redis
+
+# AgentMesh - Dev LLM defaults
+agentmesh:
+  llm:
+    provider: ${LLM_PROVIDER:openai-compatible}
+    base-url: ${LLM_BASE_URL:http://localhost:1234/v1}
+
+  autobads:
+    base-url: ${AUTOBADS_BASE_URL:http://localhost:8083}
+
+# Logging - Verbose for development
+logging:
+  level:
+    root: INFO
+    com.therighthandapp.agentmesh: DEBUG
+    org.springframework: INFO
+    org.hibernate.SQL: DEBUG
+    org.flywaydb: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+

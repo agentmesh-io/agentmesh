@@ -31,7 +31,7 @@ services:
       TRANSFORMERS_INFERENCE_API: 'http://t2v-transformers:8080'
       CLUSTER_HOSTNAME: 'weaviate'
     ports:
-      - "8081:8080"
+      - "18086:8080"  # Avoid conflict with AgentMesh server.port=8081
     volumes:
       - weaviate_data:/var/lib/weaviate
     depends_on:
@@ -199,10 +199,11 @@ services:
       # Operator
       AGENTMESH_OPERATOR_ENABLED: 'false'
 
-      # LLM Configuration - Ollama (connects to host machine)
-      AGENTMESH_LLM_OLLAMA_ENABLED: 'true'
-      AGENTMESH_LLM_OLLAMA_BASE_URL: 'http://host.docker.internal:11434'
-      AGENTMESH_LLM_OLLAMA_MODEL: 'qwen3.5:latest'
+      # LLM Configuration - LMStudio as primary (per ~/infra/onboarding.md)
+      LLM_PROVIDER: 'openai-compatible'
+      LLM_BASE_URL: 'http://host.docker.internal:1234/v1'
+      LLM_MODEL: 'default'
+      AGENTMESH_LLM_OLLAMA_ENABLED: 'false'
       AGENTMESH_LLM_OPENAI_ENABLED: 'false'
       AGENTMESH_LLM_LORA_ENABLED: 'false'
 
