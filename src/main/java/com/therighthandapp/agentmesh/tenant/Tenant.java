@@ -1,5 +1,6 @@
 package com.therighthandapp.agentmesh.tenant;
 
+import com.therighthandapp.agentmesh.security.AesEncryptAttributeConverter;
 import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.HashMap;
@@ -8,6 +9,9 @@ import java.util.Map;
 /**
  * Tenant entity representing an organization in the multi-tenant system.
  * Each tenant has isolated resources, data, and configuration.
+ *
+ * <p>PII fields (name, organizationId, dataRegion) are encrypted at rest
+ * using AES-256-GCM when PII_ENCRYPTION_KEY env var is set.</p>
  */
 @Entity
 @Table(name = "tenants")
@@ -17,10 +21,12 @@ public class Tenant {
     @GeneratedValue(strategy = GenerationType.UUID)
     private String id;
 
-    @Column(nullable = false, unique = true)
+    @Convert(converter = AesEncryptAttributeConverter.class)
+    @Column(nullable = false, columnDefinition = "TEXT")
     private String name;
 
-    @Column(nullable = false, unique = true)
+    @Convert(converter = AesEncryptAttributeConverter.class)
+    @Column(nullable = false, columnDefinition = "TEXT")
     private String organizationId;
 
     @Enumerated(EnumType.STRING)
@@ -46,6 +52,7 @@ public class Tenant {
     private Long maxStorageMb = 10240L; // 10GB default
 
     // Data sovereignty
+    @Convert(converter = AesEncryptAttributeConverter.class)
     @Column
     private String dataRegion; // e.g., "us-east-1", "eu-west-1"
 
