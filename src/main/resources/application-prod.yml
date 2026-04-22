@@ -181,7 +181,7 @@ logging:
 
 # Security (production)
 server:
-  port: 8080
+  port: ${SERVER_PORT:8081}
   shutdown: graceful
   error:
     include-message: never

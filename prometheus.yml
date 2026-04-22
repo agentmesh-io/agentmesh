@@ -11,7 +11,7 @@ scrape_configs:
   - job_name: 'agentmesh'
     metrics_path: '/actuator/prometheus'
     static_configs:
-      - targets: ['agentmesh-api:8080']
+      - targets: ['agentmesh-api:8081']
         labels:
           application: 'agentmesh'
           service: 'backend'
@@ -27,7 +27,7 @@ scrape_configs:
   - job_name: 'blackboard'
     metrics_path: '/actuator/prometheus'
     static_configs:
-      - targets: ['agentmesh-api:8080']
+      - targets: ['agentmesh-api:8081']
         labels:
           component: 'blackboard'
     metric_relabel_configs:
@@ -39,7 +39,7 @@ scrape_configs:
   - job_name: 'memory'
     metrics_path: '/actuator/prometheus'
     static_configs:
-      - targets: ['agentmesh-api:8080']
+      - targets: ['agentmesh-api:8081']
         labels:
           component: 'memory'
     metric_relabel_configs:
@@ -51,7 +51,7 @@ scrape_configs:
   - job_name: 'agents'
     metrics_path: '/actuator/prometheus'
     static_configs:
-      - targets: ['agentmesh-api:8080']
+      - targets: ['agentmesh-api:8081']
         labels:
           component: 'agents'
     metric_relabel_configs:
@@ -63,7 +63,7 @@ scrape_configs:
   - job_name: 'mast'
     metrics_path: '/actuator/prometheus'
     static_configs:
-      - targets: ['agentmesh-api:8080']
+      - targets: ['agentmesh-api:8081']
         labels:
           component: 'mast'
     metric_relabel_configs:
@@ -75,7 +75,7 @@ scrape_configs:
   - job_name: 'llm'
     metrics_path: '/actuator/prometheus'
     static_configs:
-      - targets: ['agentmesh-api:8080']
+      - targets: ['agentmesh-api:8081']
         labels:
           component: 'llm'
     metric_relabel_configs:
@@ -87,7 +87,7 @@ scrape_configs:
   - job_name: 'self-correction'
     metrics_path: '/actuator/prometheus'
     static_configs:
-      - targets: ['agentmesh-api:8080']
+      - targets: ['agentmesh-api:8081']
         labels:
           component: 'self-correction'
     metric_relabel_configs:

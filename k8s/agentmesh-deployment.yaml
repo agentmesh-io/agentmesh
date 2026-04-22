@@ -84,7 +84,7 @@ spec:
         version: v1
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "8080"
+        prometheus.io/port: "8081"
         prometheus.io/path: "/actuator/prometheus"
     spec:
       # Security Context
@@ -112,7 +112,7 @@ spec:
         
         ports:
         - name: http
-          containerPort: 8080
+          containerPort: 8081
           protocol: TCP
         
         # Environment Variables from ConfigMap
@@ -135,7 +135,7 @@ spec:
         livenessProbe:
           httpGet:
             path: /actuator/health/liveness
-            port: 8080
+            port: 8081
           initialDelaySeconds: 60
           periodSeconds: 10
           timeoutSeconds: 5
@@ -144,7 +144,7 @@ spec:
         readinessProbe:
           httpGet:
             path: /actuator/health/readiness
-            port: 8080
+            port: 8081
           initialDelaySeconds: 30
           periodSeconds: 5
           timeoutSeconds: 3
@@ -154,7 +154,7 @@ spec:
         startupProbe:
           httpGet:
             path: /actuator/health
-            port: 8080
+            port: 8081
           initialDelaySeconds: 10
           periodSeconds: 10
           timeoutSeconds: 3
@@ -196,8 +196,8 @@ spec:
     app: agentmesh
   ports:
   - name: http
-    port: 8080
-    targetPort: 8080
+    port: 8081
+    targetPort: 8081
     protocol: TCP
   sessionAffinity: ClientIP  # For stateful operations
   sessionAffinityConfig:
@@ -218,8 +218,8 @@ spec:
     app: agentmesh
   ports:
   - name: http
-    port: 8080
-    targetPort: 8080
+    port: 8081
+    targetPort: 8081
     protocol: TCP
 ---
 apiVersion: policy/v1

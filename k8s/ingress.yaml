@@ -79,7 +79,7 @@ spec:
           name: ingress-nginx
     ports:
     - protocol: TCP
-      port: 8080
+      port: 8081
   # Allow from monitoring (Prometheus)
   - from:
     - namespaceSelector:
@@ -87,7 +87,7 @@ spec:
           name: monitoring
     ports:
     - protocol: TCP
-      port: 8080
+      port: 8081
   egress:
   # Allow to PostgreSQL
   - to:
