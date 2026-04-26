@@ -5,6 +5,7 @@ import com.therighthandapp.agentmesh.tenant.Tenant;
 import com.therighthandapp.agentmesh.tenant.TenantService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Optional;
@@ -12,9 +13,12 @@ import java.util.Optional;
 /**
  * REST API for tenant and project management.
  * Provides endpoints for creating tenants, managing projects, and tier upgrades.
+ *
+ * <p>RBAC (M13.2): admin-only — tenant management is a privileged operation.
  */
 @RestController
 @RequestMapping("/api/tenants")
+@PreAuthorize("@rbac.admin()")
 public class TenantController {
 
     private final TenantService tenantService;

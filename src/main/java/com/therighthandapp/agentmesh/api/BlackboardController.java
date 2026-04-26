@@ -4,16 +4,21 @@ import com.therighthandapp.agentmesh.blackboard.BlackboardEntry;
 import com.therighthandapp.agentmesh.blackboard.BlackboardService;
 import com.therighthandapp.agentmesh.blackboard.BlackboardSnapshot;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 /**
- * REST API for Blackboard operations
+ * REST API for Blackboard operations.
+ *
+ * <p>RBAC (M13.2): readable by any authenticated user; writes (publish entries)
+ * require admin or developer.
  */
 @RestController
 @RequestMapping("/api/blackboard")
 @CrossOrigin(origins = {"http://localhost:3000", "http://localhost:3001"})
+@PreAuthorize("@rbac.any()")
 public class BlackboardController {
 
     private final BlackboardService blackboardService;
@@ -23,6 +28,7 @@ public class BlackboardController {
     }
 
     @PostMapping("/entries")
+    @PreAuthorize("@rbac.write()")
     public ResponseEntity<BlackboardEntry> postEntry(
             @RequestParam String agentId,
             @RequestParam String entryType,
@@ -59,6 +65,7 @@ public class BlackboardController {
     }
 
     @PutMapping("/entries/{id}")
+    @PreAuthorize("@rbac.write()")
     public ResponseEntity<BlackboardEntry> updateEntry(
             @PathVariable Long id,
             @RequestBody String content) {
@@ -72,6 +79,7 @@ public class BlackboardController {
     }
 
     @PostMapping("/snapshot")
+    @PreAuthorize("@rbac.write()")
     public ResponseEntity<SnapshotResponse> createSnapshot() {
         BlackboardSnapshot snapshot = blackboardService.createSnapshot();
         return ResponseEntity.ok(new SnapshotResponse(

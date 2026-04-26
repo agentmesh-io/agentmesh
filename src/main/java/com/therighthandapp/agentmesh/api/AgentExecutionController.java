@@ -5,14 +5,18 @@ import com.therighthandapp.agentmesh.service.AgentExecutionService.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 /**
  * REST API for executing agent tasks in the E2E workflow.
  * Provides endpoints for Planner, Implementer, Reviewer, and Tester agents.
+ *
+ * <p>RBAC (M13.2): admin or developer — agent execution is a write path.
  */
 @RestController
 @RequestMapping("/api/agents/execute")
+@PreAuthorize("@rbac.write()")
 public class AgentExecutionController {
     private static final Logger log = LoggerFactory.getLogger(AgentExecutionController.class);
 

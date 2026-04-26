@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -19,12 +20,16 @@ import java.util.*;
  * REST API controller for Project lifecycle management.
  * Provides the /api/projects/initialize endpoint consumed by Auto-BADS,
  * plus project status and unified flow tracking.
+ *
+ * <p>RBAC (M13.2): reads viewable by all authenticated; writes
+ * (initialize/create) require admin or developer.
  */
 @RestController
 @RequestMapping("/api/projects")
 @RequiredArgsConstructor
 @Slf4j
 @CrossOrigin(origins = {"http://localhost:5173", "http://localhost:3000", "http://localhost:3001", "http://localhost:13001", "http://app.localhost"})
+@PreAuthorize("@rbac.any()")
 public class ProjectController {
 
     private final ProjectInitializationService projectInitializationService;
@@ -38,6 +43,7 @@ public class ProjectController {
      * POST /api/projects/initialize
      */
     @PostMapping("/initialize")
+    @PreAuthorize("@rbac.write()")
     public ResponseEntity<Map<String, Object>> initializeProject(@RequestBody Map<String, Object> request) {
         log.info("POST /api/projects/initialize - Received project initialization request");
 

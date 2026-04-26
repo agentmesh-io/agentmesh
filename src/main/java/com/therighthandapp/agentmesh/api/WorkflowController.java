@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -103,6 +104,7 @@ public class WorkflowController {
      * POST /api/workflows/{id}/resume
      */
     @PostMapping("/{id}/resume")
+    @PreAuthorize("@rbac.write()")
     public ResponseEntity<Map<String, Object>> resumeWorkflow(@PathVariable String id) {
         log.info("POST /api/workflows/{}/resume - Resuming workflow", id);
         
@@ -116,6 +118,7 @@ public class WorkflowController {
      * POST /api/workflows/{id}/cancel
      */
     @PostMapping("/{id}/cancel")
+    @PreAuthorize("@rbac.write()")
     public ResponseEntity<Map<String, Object>> cancelWorkflow(@PathVariable String id) {
         log.info("POST /api/workflows/{}/cancel - Cancelling workflow", id);
         

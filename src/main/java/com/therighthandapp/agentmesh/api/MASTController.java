@@ -4,6 +4,7 @@ import com.therighthandapp.agentmesh.mast.MASTFailureMode;
 import com.therighthandapp.agentmesh.mast.MASTValidator;
 import com.therighthandapp.agentmesh.mast.MASTViolation;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -11,11 +12,14 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * REST API for MAST violation monitoring and agent health
+ * REST API for MAST violation monitoring and agent health.
+ *
+ * <p>RBAC (M13.2): readable by any authenticated user (admin / developer / viewer).
  */
 @RestController
 @RequestMapping("/api/mast")
 @CrossOrigin(origins = {"http://localhost:3000", "http://localhost:3001"})
+@PreAuthorize("@rbac.any()")
 public class MASTController {
 
     private final MASTValidator mastValidator;

@@ -6,14 +6,20 @@ import com.therighthandapp.agentmesh.service.AgentRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
 import java.util.Collection;
 
+/**
+ * RBAC (M13.2): authenticated user (any role) can query the registry;
+ * write operations (register/update) require admin or developer.
+ */
 @RestController
 @RequestMapping("/api/agents")
 @CrossOrigin(origins = {"http://localhost:3000", "http://localhost:3001"})
+@PreAuthorize("@rbac.write()")
 public class AgentController {
     private static final Logger log = LoggerFactory.getLogger(AgentController.class);
 

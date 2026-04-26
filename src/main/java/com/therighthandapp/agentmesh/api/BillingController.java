@@ -12,16 +12,20 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
 
 /**
- * REST API for billing and usage analytics
+ * REST API for billing and usage analytics.
+ *
+ * <p>RBAC (M13.2): admin-only — pricing/usage data is sensitive.
  */
 @RestController
 @RequestMapping("/api/billing")
 @Tag(name = "Billing", description = "Billing, usage tracking, and cost estimation APIs")
+@PreAuthorize("@rbac.admin()")
 public class BillingController {
 
     private final BillingService billingService;
