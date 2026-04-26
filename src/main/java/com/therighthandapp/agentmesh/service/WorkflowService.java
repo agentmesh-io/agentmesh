@@ -171,10 +171,12 @@ public class WorkflowService {
             // Phase 1: Planning
             log.info("Workflow {}: Starting PLANNING phase", workflowId);
             updateWorkflowPhase(workflowId, "PLANNING", "RUNNING", 10);
+            webSocketHandler.broadcastAgentStatus("planner", "PlannerAgent", "RUNNING");
 
             String planId = agentActivity.executePlanning(srsContent);
             updateWorkflowArtifact(workflowId, "planId", planId);
             updateWorkflowPhase(workflowId, "PLANNING", "COMPLETED", 20);
+            webSocketHandler.broadcastAgentStatus("planner", "PlannerAgent", "IDLE");
 
             if (isWorkflowCancelled(workflowId)) return;
             Thread.sleep(1000);
@@ -182,10 +184,12 @@ public class WorkflowService {
             // Phase 2: Architecture
             log.info("Workflow {}: Starting ARCHITECTURE phase", workflowId);
             updateWorkflowPhase(workflowId, "ARCHITECTURE", "RUNNING", 25);
+            webSocketHandler.broadcastAgentStatus("architect", "ArchitectAgent", "RUNNING");
 
             String architectureId = agentActivity.executeArchitecture(planId);
             updateWorkflowArtifact(workflowId, "architectureId", architectureId);
             updateWorkflowPhase(workflowId, "ARCHITECTURE", "COMPLETED", 35);
+            webSocketHandler.broadcastAgentStatus("architect", "ArchitectAgent", "IDLE");
 
             if (isWorkflowCancelled(workflowId)) return;
             Thread.sleep(1000);
@@ -193,10 +197,12 @@ public class WorkflowService {
             // Phase 3: Code Generation
             log.info("Workflow {}: Starting CODE_GENERATION phase", workflowId);
             updateWorkflowPhase(workflowId, "CODE_GENERATION", "RUNNING", 40);
+            webSocketHandler.broadcastAgentStatus("developer", "DeveloperAgent", "RUNNING");
 
             String codeId = agentActivity.executeCodeGeneration(planId, architectureId);
             updateWorkflowArtifact(workflowId, "codeId", codeId);
             updateWorkflowPhase(workflowId, "CODE_GENERATION", "COMPLETED", 60);
+            webSocketHandler.broadcastAgentStatus("developer", "DeveloperAgent", "IDLE");
 
             if (isWorkflowCancelled(workflowId)) return;
             Thread.sleep(1000);
@@ -204,10 +210,12 @@ public class WorkflowService {
             // Phase 4: Testing
             log.info("Workflow {}: Starting TESTING phase", workflowId);
             updateWorkflowPhase(workflowId, "TESTING", "RUNNING", 65);
+            webSocketHandler.broadcastAgentStatus("tester", "TesterAgent", "RUNNING");
 
             String testId = agentActivity.executeTestGeneration(codeId);
             updateWorkflowArtifact(workflowId, "testId", testId);
             updateWorkflowPhase(workflowId, "TESTING", "COMPLETED", 80);
+            webSocketHandler.broadcastAgentStatus("tester", "TesterAgent", "IDLE");
 
             if (isWorkflowCancelled(workflowId)) return;
             Thread.sleep(1000);
@@ -215,10 +223,12 @@ public class WorkflowService {
             // Phase 5: Review
             log.info("Workflow {}: Starting REVIEW phase", workflowId);
             updateWorkflowPhase(workflowId, "REVIEW", "RUNNING", 85);
+            webSocketHandler.broadcastAgentStatus("reviewer", "ReviewerAgent", "RUNNING");
 
             String reviewId = agentActivity.executeCodeReview(codeId);
             updateWorkflowArtifact(workflowId, "reviewId", reviewId);
             updateWorkflowPhase(workflowId, "REVIEW", "COMPLETED", 95);
+            webSocketHandler.broadcastAgentStatus("reviewer", "ReviewerAgent", "IDLE");
 
             if (isWorkflowCancelled(workflowId)) return;
 

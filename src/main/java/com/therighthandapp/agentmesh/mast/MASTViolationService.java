@@ -2,8 +2,10 @@ package com.therighthandapp.agentmesh.mast;
 
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.therighthandapp.agentmesh.websocket.LiveStreamBridge;
 
 import java.time.Instant;
 import java.util.List;
@@ -17,6 +19,9 @@ public class MASTViolationService {
 
     private final MASTViolationRepository repository;
 
+    @Autowired(required = false)
+    private LiveStreamBridge liveStreamBridge;
+
     public MASTViolationService(MASTViolationRepository repository) {
         this.repository = repository;
     }
@@ -27,7 +32,11 @@ public class MASTViolationService {
     @Transactional
     @CacheEvict(value = {"violations"}, allEntries = true)
     public MASTViolation save(MASTViolation violation) {
-        return repository.save(violation);
+        MASTViolation saved = repository.save(violation);
+        if (liveStreamBridge != null) {
+            liveStreamBridge.broadcastMastViolation(saved);
+        }
+        return saved;
     }
 
     /**
