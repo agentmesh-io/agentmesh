@@ -148,8 +148,18 @@ agentmesh:
   # Security Configuration
   security:
     api-key-auth:
-      enabled: ${API_KEY_AUTH_ENABLED:false}  # Enable for production
-    api-key: ${AGENTMESH_API_KEY:}  # Set via env var for production
+      enabled: ${API_KEY_AUTH_ENABLED:false}  # Legacy — prefer JWT (M13.2)
+    api-key: ${AGENTMESH_API_KEY:}            # Legacy — prefer JWT (M13.2)
+
+    # M13.2 — JWT (RS256) settings
+    jwt:
+      keys-dir: ${AGENTMESH_JWT_KEYS_DIR:${user.home}/.agentmesh/jwt}
+      access-ttl: ${AGENTMESH_JWT_ACCESS_TTL:PT15M}   # 15-minute access token (ROADMAP_M13 §13.2)
+      refresh-ttl: ${AGENTMESH_JWT_REFRESH_TTL:P7D}   # 7-day opaque refresh token (Redis-backed)
+
+    # AUTH_ENFORCED flag — keep dev/UAT working until end-of-sprint cutover
+    # (Risk register R6 in docs/PLAN_M13.2.md)
+    auth-enforced: ${AUTH_ENFORCED:false}
 
   # Multi-Tenancy Configuration
   multitenancy:
