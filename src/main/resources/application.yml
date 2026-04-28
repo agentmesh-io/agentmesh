@@ -157,9 +157,12 @@ agentmesh:
       access-ttl: ${AGENTMESH_JWT_ACCESS_TTL:PT15M}   # 15-minute access token (ROADMAP_M13 §13.2)
       refresh-ttl: ${AGENTMESH_JWT_REFRESH_TTL:P7D}   # 7-day opaque refresh token (Redis-backed)
 
-    # AUTH_ENFORCED flag — keep dev/UAT working until end-of-sprint cutover
-    # (Risk register R6 in docs/PLAN_M13.2.md)
-    auth-enforced: ${AUTH_ENFORCED:false}
+    # AUTH_ENFORCED flag — Risk R6 closed in M13.3 commit 1.
+    # Default flipped to true: every endpoint outside the public allow-list
+    # in SecurityConfig (see /api/auth/**, /actuator/health*, /ws/**, swagger,
+    # prometheus) requires a valid Bearer token. Set AUTH_ENFORCED=false in
+    # the env to fall back to the M13.2 permissive mode for local debugging.
+    auth-enforced: ${AUTH_ENFORCED:true}
 
   # Multi-Tenancy Configuration
   multitenancy:

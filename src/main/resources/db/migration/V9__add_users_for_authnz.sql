@@ -38,8 +38,9 @@ SELECT
     '00000000-0000-0000-0000-000000000000'::uuid,
     'admin',
     'admin@agentmesh.local',
-    -- BCrypt hash of "admin-change-me" (cost 10). Generated with:
-    --   echo -n 'admin-change-me' | htpasswd -bnBC 10 "" | tr -d ':\n'
+    -- BCrypt placeholder hash — fixed up by V10 migration with a real hash
+    -- of "admin-change-me" (Spring BCryptPasswordEncoder, cost 10).
+    -- See V10__fix_admin_password_hash.sql.
     '$2a$10$dxjvLMr4S8PGQMPvB.Qzn.tFVx1sUMzjs/TyV1N9WXQyWZsR9YyZi',
     'admin'
 WHERE NOT EXISTS (

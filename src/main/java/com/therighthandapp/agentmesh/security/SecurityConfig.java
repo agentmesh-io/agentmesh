@@ -48,12 +48,19 @@ public class SecurityConfig {
 
     private final JwtToTenantContextFilter jwtFilter;
 
-    @Value("${agentmesh.security.auth-enforced:false}")
+    /**
+     * Hard-default flipped to {@code true} as part of M13.3 commit 1 (R6 close).
+     * The YAML default in {@code application.yml} is also {@code true}; this in-code
+     * fallback ensures that a deployment which forgets to mount {@code application.yml}
+     * still fails closed instead of silently permit-all. To roll back locally for
+     * debugging, set {@code AUTH_ENFORCED=false} in the environment.
+     */
+    @Value("${agentmesh.security.auth-enforced:true}")
     private boolean authEnforced;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        log.info("[security] auth-enforced={} — wiring SecurityFilterChain", authEnforced);
+        log.info("[security] auth-enforced={} — wiring SecurityFilterChain (R6 closed in M13.3 commit 1)", authEnforced);
 
         http
                 .csrf(AbstractHttpConfigurer::disable)

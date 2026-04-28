@@ -2,8 +2,9 @@ FROM eclipse-temurin:22-jre-alpine
 
 WORKDIR /app
 
-# Copy the pre-built JAR
-COPY target/AgentMesh-1.0-SNAPSHOT.jar app.jar
+# Copy the pre-built Spring Boot JAR (version follows pom.xml)
+ARG JAR_FILE=target/AgentMesh-1.0.0.jar
+COPY ${JAR_FILE} app.jar
 
 # Expose port
 EXPOSE 8081

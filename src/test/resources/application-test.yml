@@ -27,6 +27,13 @@ spring:
 agentmesh:
   multitenancy:
     enabled: true
+  security:
+    # Tests run with auth disabled so existing @SpringBootTest integration
+    # tests in api/* (AgentControllerIntegrationTest, BlackboardControllerIntegrationTest,
+    # MASTControllerIntegrationTest) keep their permit-all behaviour without
+    # needing per-method @WithMockUser. Production default flipped to true
+    # in M13.3 commit 1 (R6 close); see SecurityConfig.java.
+    auth-enforced: false
   llm:
     lora:
       enabled: true
