@@ -25,9 +25,33 @@ public class MASTViolation {
     @Column(nullable = false)
     private String taskId; // Reference to Blackboard entry or workflow execution
 
-    @Lob
+    /**
+     * Detailed evidence of the violation.
+     *
+     * <p><b>M13.3 c2 — F2 fix.</b> Previously {@code @Lob @Column(columnDefinition = "TEXT")},
+     * which on PostgreSQL caused Hibernate to bind the column to {@code ClobJdbcType}
+     * and read it through {@code LargeObjectManager}, which throws
+     * {@code "Large Objects may not be used in auto-commit mode"} when the
+     * surrounding query is not wrapped in a transaction. The MASTValidator
+     * read methods ({@code getRecentViolations}, {@code getUnresolvedViolations})
+     * are intentionally non-transactional read paths, so any controller call
+     * to {@code MASTController#getRecentViolations} / {@code getUnresolvedViolations}
+     * / {@code getViolationsByAgent} blew up with HTTP 500 (surfaced as 403 by
+     * Spring's exception handling) whenever there was at least one row in
+     * {@code mast_violations}. H2 (used by the test slice) silently tolerates
+     * the same code path, so the bug only manifested on the dev-postgres
+     * runtime and was missed until the M13.3 c1 verification matrix.
+     *
+     * <p>The underlying PostgreSQL column is already {@code text} (Flyway V1
+     * has always declared it that way), so dropping {@code @Lob} is a pure
+     * Hibernate-side change — Hibernate now uses {@code VarcharJdbcType} and
+     * reads the value as a regular String at result-set time, no transaction
+     * required, no schema migration required. See
+     * {@code docs/ACCEPTANCE_M13.3.md} Finding F2 and the regression test in
+     * {@code MASTViolationLobMappingTest}.
+     */
     @Column(columnDefinition = "TEXT")
-    private String evidence; // Detailed evidence of the violation
+    private String evidence;
 
     @Column(nullable = false)
     private Instant detectedAt;
